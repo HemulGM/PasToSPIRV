@@ -3,10 +3,7 @@ unit PTS.IR;
 interface
 
 uses
-  System.Generics.Collections,
-  PTS.Types,
-  PTS.Features,
-  PTS.Diagnostics;
+  System.Generics.Collections, PTS.Types, PTS.Features, PTS.Diagnostics;
 
 const
   MaxShaderParameters = 255;
@@ -15,7 +12,9 @@ const
 type
   TVariableKind = (vkLocal, vkBuffer, vkPushConstant, vkParameter, vkResult,
     vkShared, vkImage, vkTexture, vkSampler, vkConstant, vkInput, vkOutput);
+
   TBufferAccess = (baReadOnly, baWriteOnly, baReadWrite);
+
   TParameterMode = (pmValue, pmConst, pmVar, pmOut);
 
   TShaderFunction = class;
@@ -59,8 +58,11 @@ type
     ekInSet,        // Left in [Arguments]: values or ekRange items, Left evaluated once
     ekRange,        // Left..Right inside ekInSet
     ekTexelFetch, ekTextureSize);
+
   TAtomicKind = (akAdd, akExchange, akCompareExchange, akAnd, akOr);
+
   TBarrierKind = (bkWorkgroup, bkBuffer, bkImage);
+
   TIntrinsic = (inMin, inMax, inAbs, inClamp, inDot, inSqrt,
     inSingleToBits, inBitsToSingle, inDoubleToBits, inBitsToDouble,
     inRoundEven, inRound, inTrunc, inFloor, inCeil, inIsNan, inIsInfinite,
@@ -68,6 +70,7 @@ type
     inOrd,   // Ord(Boolean) -> Integer 0/1
     inSqr,   // Sqr(X) = X * X with X evaluated once
     inRoundFloat, inFloorFloat, inDdxFine, inDdyFine, inLog2, inFma);
+
   TOperator = (opNone, opNegate, opNot, opAdd, opSubtract, opMultiply,
     opDivide, opIntDivide, opModulo, opEqual, opNotEqual, opLess,
     opLessEqual, opGreater, opGreaterEqual, opAnd, opOr, opXor,
@@ -109,6 +112,7 @@ type
     skDeclare,     // inline var: Target, optional initializer Value
     skIncrement,   // Inc/Dec/Include/Exclude: Target := Target <Operation> Value, one address
     skDiscard, skInterlock);
+
   TStatement = class
   public
     Kind: TStatementKind;
@@ -187,8 +191,10 @@ implementation
 function ExpressionIsAddressable(AExpression: TExpression): Boolean;
 begin
   case AExpression.Kind of
-    ekLocal, ekBufferElement, ekPushConstant: Result := True;
-    ekField, ekIndex, ekComponent: Result := ExpressionIsAddressable(AExpression.Left);
+    ekLocal, ekBufferElement, ekPushConstant:
+      Result := True;
+    ekField, ekIndex, ekComponent:
+      Result := ExpressionIsAddressable(AExpression.Left);
     // A swizzle is written component by component; it has no single address.
   else
     Result := False;
@@ -285,3 +291,4 @@ begin
 end;
 
 end.
+

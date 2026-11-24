@@ -10,17 +10,19 @@ const
   MaxCompositeSize = 16 * 1024 * 1024;
 
 function TypeSize(AType: TShaderType; AComposite: TCompositeType): Cardinal;
+
 function TypeAlignment(AType: TShaderType; AComposite: TCompositeType): Cardinal;
+
 function ArrayStride(AType: TShaderType; AComposite: TCompositeType): Cardinal;
+
 procedure CalculateLayout(AComposite: TCompositeType);
+
 procedure RequireExternalLayout(AType: TShaderType; AComposite: TCompositeType);
 
 implementation
 
 uses
-  System.SysUtils,
-  System.Math,
-  PTS.Diagnostics;
+  System.SysUtils, System.Math, PTS.Diagnostics;
 
 function AlignUp(AValue, AAlignment: UInt64): UInt64;
 begin
@@ -29,17 +31,22 @@ end;
 
 function TypeSize(AType: TShaderType; AComposite: TCompositeType): Cardinal;
 begin
-  if AType = stComposite then Exit(AComposite.Size);
+  if AType = stComposite then
+    Exit(AComposite.Size);
   Result := Cardinal(ComponentCount(AType) * (ScalarBitWidth(AType) div 8));
 end;
 
 function TypeAlignment(AType: TShaderType; AComposite: TCompositeType): Cardinal;
 begin
-  if AType = stComposite then Exit(AComposite.Alignment);
+  if AType = stComposite then
+    Exit(AComposite.Alignment);
   case ComponentCount(AType) of
-    1: Result := ScalarBitWidth(AType) div 8;
-    2: Result := 2 * Cardinal(ScalarBitWidth(AType) div 8);
-    3, 4: Result := 4 * Cardinal(ScalarBitWidth(AType) div 8);
+    1:
+      Result := ScalarBitWidth(AType) div 8;
+    2:
+      Result := 2 * Cardinal(ScalarBitWidth(AType) div 8);
+    3, 4:
+      Result := 4 * Cardinal(ScalarBitWidth(AType) div 8);
   else
     raise EArgumentException.Create('Internal error: type has no value layout');
   end;
@@ -95,8 +102,7 @@ begin
   if AType = stBoolean then
     raise EShaderError.Create(APosition, 'Boolean is not supported in GPU resource layouts; use Cardinal');
   if AType in [stEnum, stSet] then
-    raise EShaderError.Create(APosition,
-      'Enumerations and sets are not supported in GPU resource layouts; store Cardinal and cast');
+    raise EShaderError.Create(APosition, 'Enumerations and sets are not supported in GPU resource layouts; store Cardinal and cast');
 end;
 
 procedure RequireExternalLayout(AType: TShaderType; AComposite: TCompositeType);
@@ -104,8 +110,10 @@ var
   Field: TTypeField;
 begin
   CheckLayoutScalar(AType, TSourcePosition.Create(1, 1));
-  if AType <> stComposite then Exit;
-  if AComposite.ExternalLayout then Exit;
+  if AType <> stComposite then
+    Exit;
+  if AComposite.ExternalLayout then
+    Exit;
   if AComposite.Kind = ctArray then
   begin
     CheckLayoutScalar(AComposite.ElementType, AComposite.Position);
@@ -121,3 +129,4 @@ begin
 end;
 
 end.
+

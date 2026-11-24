@@ -2,14 +2,16 @@ unit PTS.Graphics;
 
 interface
 
-uses PTS.IR;
+uses
+  PTS.IR;
 
 procedure CheckGraphics(AModule: TShaderModule);
 
 implementation
 
 uses
-  System.SysUtils, System.Generics.Collections, PTS.Types, PTS.Features, PTS.Diagnostics;
+  System.SysUtils, System.Generics.Collections, PTS.Types, PTS.Features,
+  PTS.Diagnostics;
 
 procedure CheckGraphics(AModule: TShaderModule);
 var
@@ -340,3 +342,4 @@ begin
 end;
 
 end.
+

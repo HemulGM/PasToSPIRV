@@ -5,8 +5,7 @@ unit PTS.Source;
 interface
 
 uses
-  System.Generics.Collections,
-  PTS.Diagnostics;
+  System.Generics.Collections, PTS.Diagnostics;
 
 type
   TSourceText = record
@@ -77,7 +76,8 @@ var
 begin
   inherited Create;
   Text := StringReplace(StringReplace(AText, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]);
-  if (Text <> '') and (Text[1] = #$FEFF) then Delete(Text, 1, 1);
+  if (Text <> '') and (Text[1] = #$FEFF) then
+    Delete(Text, 1, 1);
   FileName := AFileName;
   Lines := Text.Split([#10], TStringSplitOptions.None);
   SetLength(Origins, Length(Lines));
@@ -120,3 +120,4 @@ begin
 end;
 
 end.
+

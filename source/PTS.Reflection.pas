@@ -3,25 +3,21 @@ unit PTS.Reflection;
 interface
 
 uses
-  PTS.IR,
-  PTS.Source;
+  PTS.IR, PTS.Source;
 
 function BuildReflection(AModule: TShaderModule; const AVersion: string; ASources: TSourceProgram = nil; AOptimize: Boolean = False): string;
 
 implementation
 
 uses
-  System.JSON,
-  PTS.Types,
-  PTS.Layout,
-  PTS.Features;
+  System.JSON, PTS.Types, PTS.Layout, PTS.Features;
 // All resource categories are explicit; opaque images are not byte buffers.
 
-procedure AddReference(AObject: TJSONObject; const AName, AIDName: string;
-  AType: TShaderType; AComposite: TCompositeType);
+procedure AddReference(AObject: TJSONObject; const AName, AIDName: string; AType: TShaderType; AComposite: TCompositeType);
 begin
   AObject.AddPair(AName, TypeReferenceName(AType, AComposite));
-  if AComposite <> nil then AObject.AddPair(AIDName, TJSONNumber.Create(AComposite.ID));
+  if AComposite <> nil then
+    AObject.AddPair(AIDName, TJSONNumber.Create(AComposite.ID));
 end;
 
 function DescribeMembers(AComposite: TCompositeType): TJSONArray;
@@ -67,7 +63,7 @@ begin
     Root.AddPair('format_version', TJSONNumber.Create(2));
     Root.AddPair('compiler', 'PasToSPIRV');
     Root.AddPair('compiler_version', AVersion);
-    Root.AddPair('language_version','1.4');
+    Root.AddPair('language_version', '1.4');
     if AModule.Vulkan11 then
     begin
       Root.AddPair('profile', ShaderStageName(AModule.Stage) + '-vulkan1.1');
@@ -86,9 +82,12 @@ begin
       Root.AddPair('target_env', 'vulkan1.0');
       Root.AddPair('spirv_version', '1.0');
     end;
-    Required := TJSONArray.Create; Root.AddPair('required_features', Required);
-    if (stInt64 in AModule.UsedTypes) or (stUInt64 in AModule.UsedTypes) then Required.Add('shaderInt64');
-    if stDouble in AModule.UsedTypes then Required.Add('shaderFloat64');
+    Required := TJSONArray.Create;
+    Root.AddPair('required_features', Required);
+    if (stInt64 in AModule.UsedTypes) or (stUInt64 in AModule.UsedTypes) then
+      Required.Add('shaderInt64');
+    if stDouble in AModule.UsedTypes then
+      Required.Add('shaderFloat64');
     for Variable in AModule.Resources do
       if (Variable.Kind = vkOutput) and Variable.HasSourceIndex and (Variable.SourceIndex = 1) then
       begin
@@ -103,10 +102,14 @@ begin
     begin
       Required.Add('shaderInt16');
     end;
-    if AModule.Storage8 then Required.Add('storageBuffer8BitAccess');
-    if AModule.Storage16 then Required.Add('storageBuffer16BitAccess');
-    if AModule.Push8 then Required.Add('storagePushConstant8');
-    if AModule.Push16 then Required.Add('storagePushConstant16');
+    if AModule.Storage8 then
+      Required.Add('storageBuffer8BitAccess');
+    if AModule.Storage16 then
+      Required.Add('storageBuffer16BitAccess');
+    if AModule.Push8 then
+      Required.Add('storagePushConstant8');
+    if AModule.Push16 then
+      Required.Add('storagePushConstant16');
     if AModule.Vulkan11 or AModule.PixelInterlock then
     begin
       RequiredExtensions := TJSONArray.Create;
@@ -126,24 +129,33 @@ begin
     Root.AddPair('strict_float', TJSONBool.Create(AModule.StrictFloat));
     if AModule.StrictFloat then
     begin
-      Required.Add('shaderDenormPreserveFloat32'); Required.Add('shaderSignedZeroInfNanPreserveFloat32');
+      Required.Add('shaderDenormPreserveFloat32');
+      Required.Add('shaderSignedZeroInfNanPreserveFloat32');
       Required.Add('shaderRoundingModeRTEFloat32');
       if stDouble in AModule.UsedTypes then
       begin
-        Required.Add('shaderDenormPreserveFloat64'); Required.Add('shaderSignedZeroInfNanPreserveFloat64');
+        Required.Add('shaderDenormPreserveFloat64');
+        Required.Add('shaderSignedZeroInfNanPreserveFloat64');
         Required.Add('shaderRoundingModeRTEFloat64');
       end;
     end;
-    if AOptimize then Root.AddPair('optimization','O1-safe-integer') else Root.AddPair('optimization','O0');
+    if AOptimize then
+      Root.AddPair('optimization', 'O1-safe-integer')
+    else
+      Root.AddPair('optimization', 'O0');
     Root.AddPair('stage', ShaderStageName(AModule.Stage));
     Root.AddPair('entry_point', AModule.EntryPointName);
     Root.AddPair('layout', 'std430');
     Root.AddPair('workgroup_memory_bytes', TJSONNumber.Create(AModule.SharedBytes));
     Root.AddPair('uses_workgroup_barrier', TJSONBool.Create(AModule.UsesWorkgroupBarrier));
-    Images := TJSONArray.Create; Root.AddPair('images', Images);
-    Textures := TJSONArray.Create; Root.AddPair('textures', Textures);
-    Samplers := TJSONArray.Create; Root.AddPair('samplers', Samplers);
-    Shared := TJSONArray.Create; Root.AddPair('shared', Shared);
+    Images := TJSONArray.Create;
+    Root.AddPair('images', Images);
+    Textures := TJSONArray.Create;
+    Root.AddPair('textures', Textures);
+    Samplers := TJSONArray.Create;
+    Root.AddPair('samplers', Samplers);
+    Shared := TJSONArray.Create;
+    Root.AddPair('shared', Shared);
     Inputs := nil;
     Outputs := nil;
     if AModule.Stage <> ssCompute then
@@ -202,7 +214,8 @@ begin
     LocalSize := TJSONArray.Create;
     Root.AddPair('local_size', LocalSize);
     if AModule.Stage = ssCompute then
-      for I := 0 to 2 do LocalSize.Add(AModule.LocalSize[I]);
+      for I := 0 to 2 do
+        LocalSize.Add(AModule.LocalSize[I]);
     Types := TJSONArray.Create;
     Root.AddPair('types', Types);
     for Composite in AModule.Types do
@@ -272,10 +285,14 @@ begin
         Item.AddPair('bytes', TJSONNumber.Create(Variable.Composite.Size));
         Continue;
       end;
-      if Variable.Kind in [vkImage,vkTexture,vkSampler] then
+      if Variable.Kind in [vkImage, vkTexture, vkSampler] then
       begin
-        if Variable.Kind = vkImage then Images.AddElement(Item)
-        else if Variable.Kind = vkTexture then Textures.AddElement(Item) else Samplers.AddElement(Item);
+        if Variable.Kind = vkImage then
+          Images.AddElement(Item)
+        else if Variable.Kind = vkTexture then
+          Textures.AddElement(Item)
+        else
+          Samplers.AddElement(Item);
         Item.AddPair('set', TJSONNumber.Create(Variable.DescriptorSet));
         Item.AddPair('binding', TJSONNumber.Create(Variable.Binding));
         if Variable.Kind = vkImage then
@@ -284,8 +301,14 @@ begin
           Item.AddPair('format', ImageFormatName(Variable.ImageFormat));
           Item.AddPair('vulkan_format', TJSONNumber.Create(ImageVulkanFormat(Variable.ImageFormat)));
           Item.AddPair('value_type', ShaderTypeName(ImagePixelType(Variable.ImageFormat)));
-          case Variable.Access of baReadOnly: AccessName := 'read_only'; baWriteOnly: AccessName := 'write_only';
-          else AccessName := 'read_write'; end;
+          case Variable.Access of
+            baReadOnly:
+              AccessName := 'read_only';
+            baWriteOnly:
+              AccessName := 'write_only';
+          else
+            AccessName := 'read_write';
+          end;
           Item.AddPair('access', AccessName);
           if Variable.Coherent then
             Item.AddPair('coherent', TJSONBool.Create(True));
@@ -300,7 +323,8 @@ begin
           else
             Item.AddPair('descriptor_type', 'sampled_image');
         end
-        else Item.AddPair('descriptor_type', 'sampler');
+        else
+          Item.AddPair('descriptor_type', 'sampler');
         Continue;
       end;
       if Variable.Kind = vkBuffer then
@@ -315,9 +339,12 @@ begin
         Item.AddPair('element_alignment', TJSONNumber.Create(Int64(TypeAlignment(Variable.DataType, Variable.Composite))));
         Item.AddPair('array_stride', TJSONNumber.Create(Int64(ArrayStride(Variable.DataType, Variable.Composite))));
         case Variable.Access of
-          baReadOnly: AccessName := 'read_only';
-          baWriteOnly: AccessName := 'write_only';
-        else AccessName := 'read_write';
+          baReadOnly:
+            AccessName := 'read_only';
+          baWriteOnly:
+            AccessName := 'write_only';
+        else
+          AccessName := 'read_write';
         end;
         Item.AddPair('access', AccessName);
       end
@@ -339,3 +366,4 @@ begin
 end;
 
 end.
+

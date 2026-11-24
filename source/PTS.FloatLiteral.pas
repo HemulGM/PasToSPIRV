@@ -10,6 +10,7 @@ interface
 // AText uses the lexer's real-literal grammar: digits [. digits] [e[+|-]digits].
 // Returns False if the rounded magnitude is not finite.
 function TryDecimalToSingleBits(const AText: string; out ABits: Cardinal): Boolean;
+
 function TryDecimalToDoubleBits(const AText: string; out ABits: UInt64): Boolean;
 
 implementation
@@ -28,7 +29,8 @@ var
   L: Integer;
 begin
   L := Length(A);
-  while (L > 0) and (A[L - 1] = 0) do Dec(L);
+  while (L > 0) and (A[L - 1] = 0) do
+    Dec(L);
   SetLength(A, L);
 end;
 
@@ -69,9 +71,11 @@ var
   I, J: Integer;
   T, Carry: UInt64;
 begin
-  if (Length(A) = 0) or (Length(B) = 0) then Exit(nil);
+  if (Length(A) = 0) or (Length(B) = 0) then
+    Exit(nil);
   SetLength(Result, Length(A) + Length(B));
-  for I := 0 to High(Result) do Result[I] := 0;
+  for I := 0 to High(Result) do
+    Result[I] := 0;
   for I := 0 to High(A) do
   begin
     Carry := 0;
@@ -90,15 +94,18 @@ function ShiftLeft(const A: TBig; ABits: Integer): TBig;
 var
   Words, Rest, I: Integer;
 begin
-  if Length(A) = 0 then Exit(nil);
+  if Length(A) = 0 then
+    Exit(nil);
   Words := ABits div 32;
   Rest := ABits mod 32;
   SetLength(Result, Length(A) + Words + 1);
-  for I := 0 to High(Result) do Result[I] := 0;
+  for I := 0 to High(Result) do
+    Result[I] := 0;
   for I := 0 to High(A) do
   begin
     Result[I + Words] := Result[I + Words] or (A[I] shl Rest);
-    if Rest > 0 then Result[I + Words + 1] := A[I] shr (32 - Rest);
+    if Rest > 0 then
+      Result[I + Words + 1] := A[I] shr (32 - Rest);
   end;
   Normalize(Result);
 end;
@@ -107,10 +114,14 @@ function Compare(const A, B: TBig): Integer;
 var
   I: Integer;
 begin
-  if Length(A) <> Length(B) then Exit(Sign(Length(A) - Length(B)));
+  if Length(A) <> Length(B) then
+    Exit(Sign(Length(A) - Length(B)));
   for I := High(A) downto 0 do
     if A[I] <> B[I] then
-      if A[I] > B[I] then Exit(1) else Exit(-1);
+      if A[I] > B[I] then
+        Exit(1)
+      else
+        Exit(-1);
   Result := 0;
 end;
 
@@ -124,7 +135,8 @@ begin
   for I := 0 to High(A) do
   begin
     T := Int64(A[I]) - Borrow;
-    if I < Length(B) then T := T - B[I];
+    if I < Length(B) then
+      T := T - B[I];
     if T < 0 then
     begin
       Inc(T, Int64(1) shl 32);
@@ -141,7 +153,8 @@ function BitLength(const A: TBig): Integer;
 var
   Top: Cardinal;
 begin
-  if Length(A) = 0 then Exit(0);
+  if Length(A) = 0 then
+    Exit(0);
   Result := (Length(A) - 1) * 32;
   Top := A[High(A)];
   while Top <> 0 do
@@ -164,16 +177,25 @@ var
 begin
   if AWide then
   begin
-    Precision := 53; MinBit := -1074; MaxBit := 971; ExponentShift := 52; DigitBudget := 1200;
+    Precision := 53;
+    MinBit := -1074;
+    MaxBit := 971;
+    ExponentShift := 52;
+    DigitBudget := 1200;
   end
   else
   begin
-    Precision := 24; MinBit := -149; MaxBit := 104; ExponentShift := 23; DigitBudget := KeptDigits;
+    Precision := 24;
+    MinBit := -149;
+    MaxBit := 104;
+    ExponentShift := 23;
+    DigitBudget := KeptDigits;
   end;
   ABits := 0;
   P := 1;
   IntStart := P;
-  while (P <= Length(AText)) and CharInSet(AText[P], ['0'..'9']) do Inc(P);
+  while (P <= Length(AText)) and CharInSet(AText[P], ['0'..'9']) do
+    Inc(P);
   IntEnd := P;
   FracStart := P;
   FracEnd := P;
@@ -181,7 +203,8 @@ begin
   begin
     Inc(P);
     FracStart := P;
-    while (P <= Length(AText)) and CharInSet(AText[P], ['0'..'9']) do Inc(P);
+    while (P <= Length(AText)) and CharInSet(AText[P], ['0'..'9']) do
+      Inc(P);
     FracEnd := P;
   end;
   Exp10 := 0;
@@ -197,18 +220,22 @@ begin
     while (P <= Length(AText)) and CharInSet(AText[P], ['0'..'9']) do
     begin
       // Saturate: anything this large is decided by the magnitude checks.
-      if Exp10 < 1000000000000 then Exp10 := Exp10 * 10 + (Ord(AText[P]) - Ord('0'));
+      if Exp10 < 1000000000000 then
+        Exp10 := Exp10 * 10 + (Ord(AText[P]) - Ord('0'));
       Inc(P);
     end;
-    if Negative then Exp10 := -Exp10;
+    if Negative then
+      Exp10 := -Exp10;
   end;
   if P <= Length(AText) then
     raise EArgumentException.Create('Internal error: malformed real literal');
 
   Digits := Copy(AText, IntStart, IntEnd - IntStart) + Copy(AText, FracStart, FracEnd - FracStart);
   First := 1;
-  while (First <= Length(Digits)) and (Digits[First] = '0') do Inc(First);
-  if First > Length(Digits) then Exit(True); // exact zero, whatever the exponent
+  while (First <= Length(Digits)) and (Digits[First] = '0') do
+    Inc(First);
+  if First > Length(Digits) then
+    Exit(True); // exact zero, whatever the exponent
   Digits := Copy(Digits, First, MaxInt);
   E := Exp10 - (FracEnd - FracStart);
   Sticky := False;
@@ -226,13 +253,17 @@ begin
   D := Length(Digits) + E; // 10^(D-1) <= value < 10^D
   if AWide then
   begin
-    if D > 310 then Exit(False);
-    if D < -324 then Exit(True);
+    if D > 310 then
+      Exit(False);
+    if D < -324 then
+      Exit(True);
   end
   else
   begin
-    if D > 40 then Exit(False);
-    if D < -46 then Exit(True);
+    if D > 40 then
+      Exit(False);
+    if D < -46 then
+      Exit(True);
   end;
 
   N := nil;
@@ -280,24 +311,28 @@ begin
     end;
     if Compare(Rest, Den) >= 0 then
       raise EInvalidOpException.Create('Internal error: real literal quotient overflow');
-    if M < (UInt64(1) shl Precision) then Break;
+    if M < (UInt64(1) shl Precision) then
+      Break;
     Inc(B);
   until False;
 
   Order := Compare(ShiftLeft(Rest, 1), Den);
-  if (Order > 0) or ((Order = 0) and (Sticky or Odd(M))) then Inc(M);
+  if (Order > 0) or ((Order = 0) and (Sticky or Odd(M))) then
+    Inc(M);
   if M = (UInt64(1) shl Precision) then
   begin
     M := UInt64(1) shl (Precision - 1);
     Inc(B);
   end;
-  if B > MaxBit then Exit(False);
+  if B > MaxBit then
+    Exit(False);
   ABits := (UInt64(B - MinBit) shl ExponentShift) + M;
   Result := True;
 end;
 
 function TryDecimalToSingleBits(const AText: string; out ABits: Cardinal): Boolean;
-var Bits: UInt64;
+var
+  Bits: UInt64;
 begin
   Result := TryDecimalToBits(AText, False, Bits);
   ABits := Cardinal(Bits);
@@ -309,3 +344,4 @@ begin
 end;
 
 end.
+

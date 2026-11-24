@@ -18,8 +18,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function Compile(const Source: string;
-      const Dependencies: TArray<TSourceText> = nil): TCompilationResult;
+    function Compile(const Source: string; const Dependencies: TArray<TSourceText> = nil): TCompilationResult;
   published
     property SourceName: string read FSourceName write FSourceName;
     property BindingsUnit: string read FBindingsUnit write FBindingsUnit;
@@ -54,11 +53,11 @@ begin
   FSearchDirectories.Assign(Value);
 end;
 
-function TShaderCompilerComponent.Compile(const Source: string;
-  const Dependencies: TArray<TSourceText>): TCompilationResult;
+function TShaderCompilerComponent.Compile(const Source: string; const Dependencies: TArray<TSourceText>): TCompilationResult;
 begin
   Result := TShaderCompiler.CompileText(Source, FSourceName, Dependencies,
     FSearchDirectories.ToStringArray, FBindingsUnit, FOptimize, FEntryPointName);
 end;
 
 end.
+

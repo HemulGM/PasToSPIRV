@@ -5,8 +5,7 @@ unit PTS.SourceLoader;
 interface
 
 uses
-  System.SysUtils,
-  PTS.Source;
+  System.SysUtils, PTS.Source;
 
 const
   MaxSourceBytes = 8 * 1024 * 1024;
@@ -18,20 +17,14 @@ const
   MaxDependencyEdges = 65536;
 
 function LoadSourceProgram(const AFileName: string; const AIncludeDirectories: TArray<string>): TSourceProgram;
-function LoadSourceText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>;
-  const ASearchDirectories: TArray<string> = nil): TSourceProgram;
+
+function LoadSourceText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>; const ASearchDirectories: TArray<string> = nil): TSourceProgram;
 
 implementation
 
 uses
-  System.Classes,
-  System.IOUtils,
-  System.Hash,
-  System.Generics.Collections,
-  System.Generics.Defaults,
-  PTS.Diagnostics,
-  PTS.Lexer,
-  PTS.Names,
+  System.Classes, System.IOUtils, System.Hash, System.Generics.Collections,
+  System.Generics.Defaults, PTS.Diagnostics, PTS.Lexer, PTS.Names,
   PTS.FileSafety;
 
 type
@@ -68,8 +61,7 @@ type
     procedure CountDocument(ADocument: TSourceDocument);
   public
     constructor Create(const AFileName: string; const ADirectories: TArray<string>);
-    constructor CreateText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>;
-      const ADirectories: TArray<string>);
+    constructor CreateText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>; const ADirectories: TArray<string>);
     destructor Destroy; override;
     function Load(const AFileName: string): TSourceProgram;
   end;
@@ -156,13 +148,14 @@ begin
       raise EArgumentException.Create('Include directory does not exist: ' + Directory);
     Duplicate := False;
     for Existing in FIncludeDirectories do
-      if AnsiSameText(Directory, Existing) or SameFileOrPath(Directory, Existing) then Duplicate := True;
-    if not Duplicate then FIncludeDirectories.Add(Directory);
+      if AnsiSameText(Directory, Existing) or SameFileOrPath(Directory, Existing) then
+        Duplicate := True;
+    if not Duplicate then
+      FIncludeDirectories.Add(Directory);
   end;
 end;
 
-constructor TSourceLoader.CreateText(const ASource, AFileName: string;
-  const ADependencies: TArray<TSourceText>; const ADirectories: TArray<string>);
+constructor TSourceLoader.CreateText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>; const ADirectories: TArray<string>);
 var
   Source: TSourceText;
   Directory: string;
@@ -176,6 +169,7 @@ var
       raise EArgumentException.Create('Duplicate virtual source: ' + Name);
     FMemorySources.Add(Name, TSourceText.Create(Name, AText));
   end;
+
 begin
   inherited Create;
   Initialize;
@@ -215,7 +209,8 @@ begin
   if FMemoryMode then
     Exit(APath);
   Result := ExtractRelativePath(IncludeTrailingPathDelimiter(FRootDirectory), APath);
-  if not TPath.IsPathRooted(Result) then Exit(StringReplace(Result, '\', '/', [rfReplaceAll]));
+  if not TPath.IsPathRooted(Result) then
+    Exit(StringReplace(Result, '\', '/', [rfReplaceAll]));
   for I := 0 to FIncludeDirectories.Count - 1 do
   begin
     Prefix := IncludeTrailingPathDelimiter(FIncludeDirectories[I]);
@@ -244,7 +239,8 @@ begin
   end
   else
     Path := TPath.GetFullPath(APath);
-  if FFiles.TryGetValue(Path, Result) then Exit;
+  if FFiles.TryGetValue(Path, Result) then
+    Exit;
   if FProgram.Files.Count >= MaxSourceFiles then
     raise EShaderError.Create(APosition, 'Source file limit exceeded (512)');
   try
@@ -265,7 +261,8 @@ begin
         if (Stream.Size > MaxSourceBytes) or (FRawBytes + Stream.Size > MaxSourceBytes) then
           raise EShaderError.Create(APosition, 'Source input budget exceeded (8 MiB)');
         SetLength(Bytes, Integer(Stream.Size));
-        if Length(Bytes) > 0 then Stream.ReadBuffer(Bytes[0], Length(Bytes));
+        if Length(Bytes) > 0 then
+          Stream.ReadBuffer(Bytes[0], Length(Bytes));
       finally
         Stream.Free;
       end;
@@ -286,18 +283,22 @@ begin
       Encoding.Free;
     end;
   except
-    on E: EShaderError do raise;
+    on E: EShaderError do
+      raise;
     on E: Exception do
     begin
-      if ARoot then raise;
+      if ARoot then
+        raise;
       raise EShaderError.Create(APosition, 'Cannot read dependency "' + Path + '": ' + E.Message);
     end;
   end;
   // Physical lines; a final line terminator does not start another line.
   Lines := 0;
   for I := 1 to Length(Text) do
-    if (Text[I] = #10) or ((Text[I] = #13) and ((I = Length(Text)) or (Text[I + 1] <> #10))) then Inc(Lines);
-  if (Text <> '') and not CharInSet(Text[Length(Text)], [#10, #13]) then Inc(Lines);
+    if (Text[I] = #10) or ((Text[I] = #13) and ((I = Length(Text)) or (Text[I + 1] <> #10))) then
+      Inc(Lines);
+  if (Text <> '') and not CharInSet(Text[Length(Text)], [#10, #13]) then
+    Inc(Lines);
   if FRawLines + Lines > MaxSourceLines then
     raise EShaderError.Create(APosition, 'Source line budget exceeded (200000)');
   Inc(FRawLines, Lines);
@@ -325,7 +326,8 @@ begin
   if FMemoryMode then
     Exit(ResolveMemoryFile(AName, APosition, AModule));
   Name := AName;
-  if AModule then Name := Name + '.pasm';
+  if AModule then
+    Name := Name + '.pasm';
   if not TPath.HasValidPathChars(Name, False) then
     raise EShaderError.Create(APosition, 'Invalid dependency path "' + AName + '"');
   if TPath.IsPathRooted(Name) or (Pos(':', Name) <> 0) then
@@ -335,18 +337,24 @@ begin
     try
       for I := -1 to FIncludeDirectories.Count - 1 do
       begin
-        if I < 0 then Directory := TPath.GetDirectoryName(APosition.FileName)
-        else Directory := FIncludeDirectories[I];
+        if I < 0 then
+          Directory := TPath.GetDirectoryName(APosition.FileName)
+        else
+          Directory := FIncludeDirectories[I];
         Candidate := TPath.GetFullPath(TPath.Combine(Directory, Name));
-        if not TFile.Exists(Candidate) then Continue;
+        if not TFile.Exists(Candidate) then
+          Continue;
         Duplicate := False;
         // The same file through another spelling/link is not an ambiguity.
         for Existing in Candidates do
-          if AnsiSameText(Existing, Candidate) or SameFileOrPath(Existing, Candidate) then Duplicate := True;
-        if not Duplicate then Candidates.Add(Candidate);
+          if AnsiSameText(Existing, Candidate) or SameFileOrPath(Existing, Candidate) then
+            Duplicate := True;
+        if not Duplicate then
+          Candidates.Add(Candidate);
       end;
     except
-      on E: EShaderError do raise;
+      on E: EShaderError do
+        raise;
       on E: Exception do
         raise EShaderError.Create(APosition, 'Invalid dependency path "' + AName + '": ' + E.Message);
     end;
@@ -360,8 +368,7 @@ begin
   end;
 end;
 
-function TSourceLoader.ResolveMemoryFile(const AName: string; const APosition: TSourcePosition;
-  AModule: Boolean): TSourceFile;
+function TSourceLoader.ResolveMemoryFile(const AName: string; const APosition: TSourcePosition; AModule: Boolean): TSourceFile;
 var
   Name, Directory, Candidate, Found, Error, Rejected: string;
   Source: TSourceText;
@@ -431,11 +438,14 @@ function LogicalLines(const AText: string): Integer;
 var
   I: Integer;
 begin
-  if AText = '' then Exit(0);
+  if AText = '' then
+    Exit(0);
   Result := 1;
   for I := 1 to Length(AText) do
-    if AText[I] = #10 then Inc(Result);
-  if AText[Length(AText)] = #10 then Dec(Result);
+    if AText[I] = #10 then
+      Inc(Result);
+  if AText[Length(AText)] = #10 then
+    Dec(Result);
 end;
 
 function TSourceLoader.ExpandIncludes(AFile: TSourceFile): TSourceDocument;
@@ -450,6 +460,7 @@ var
   Target: TSourceFile;
   Memo: TSourceDocument;
   I, J: Integer;
+
   procedure AppendLine(const AText: string; const AOrigin: TSourceLine);
   begin
     // The separator precedes every line except the first. One extra piece is the
@@ -457,14 +468,17 @@ var
     if (Text.Length + Length(AText) + Ord(Origins.Count > 0) > MaxExpandedCharacters) or
       (Origins.Count > MaxSourceLines) then
       raise EShaderError.Create(TSourcePosition.Create(AOrigin.Line, 1, AOrigin.FileName), 'Expanded source budget exceeded');
-    if Origins.Count > 0 then Text.Append(#10);
+    if Origins.Count > 0 then
+      Text.Append(#10);
     Text.Append(AText);
     Origins.Add(AOrigin);
   end;
+
 begin
   if FIncludeStack.Contains(AFile) then
     raise EShaderError.Create(TSourcePosition.Create(1, 1, AFile.FullPath), 'Include cycle');
-  if FExpanded.TryGetValue(AFile, Memo) then Exit(CopyDocument(Memo));
+  if FExpanded.TryGetValue(AFile, Memo) then
+    Exit(CopyDocument(Memo));
   FIncludeStack.Add(AFile);
   Includes := TDictionary<Integer, TToken>.Create;
   Origins := TList<TSourceLine>.Create;
@@ -475,7 +489,8 @@ begin
     try
       repeat
         Token := Lexer.Next;
-        if Token.Kind <> tkInclude then Continue;
+        if Token.Kind <> tkInclude then
+          Continue;
         if (Trim(Copy(Lines[Token.Position.Line - 1], 1, Token.Position.Column - 1)) <> '') or
           (Trim(Copy(Lines[Token.Position.Line - 1], Token.Position.Column + Token.Length, MaxInt)) <> '') then
           raise EShaderError.Create(Token.Position, 'Include directives must occupy their own line');
@@ -492,7 +507,8 @@ begin
         if FIncludeStack.Contains(Target) then
         begin
           SetLength(Chain, FIncludeStack.Count + 1);
-          for J := 0 to FIncludeStack.Count - 1 do Chain[J] := TPath.GetFileName(FIncludeStack[J].FullPath);
+          for J := 0 to FIncludeStack.Count - 1 do
+            Chain[J] := TPath.GetFileName(FIncludeStack[J].FullPath);
           Chain[High(Chain)] := TPath.GetFileName(Target.FullPath);
           raise EShaderError.Create(Include.Position, 'Include cycle: ' + string.Join(' -> ', Chain));
         end;
@@ -501,12 +517,14 @@ begin
         Child := ExpandIncludes(Target);
         try
           ChildLines := Child.Text.Split([#10], TStringSplitOptions.None);
-          for J := 0 to High(ChildLines) do AppendLine(ChildLines[J], Child.Origins[J]);
+          for J := 0 to High(ChildLines) do
+            AppendLine(ChildLines[J], Child.Origins[J]);
         finally
           Child.Free;
         end;
       end
-      else AppendLine(Lines[I], AFile.Raw.Origins[I]);
+      else
+        AppendLine(Lines[I], AFile.Raw.Origins[I]);
     Result := TSourceDocument.Create('', AFile.FullPath);
     Result.Text := Text.ToString;
     Result.Origins := Origins.ToArray;
@@ -528,18 +546,23 @@ var
   Item: TImport;
   Last, I: Integer;
   Name: string;
+
   procedure Next;
   begin
     Token := Lexer.Next;
   end;
+
   procedure Require(AKind: TTokenKind; const AMessage: string);
   begin
-    if Token.Kind <> AKind then raise EShaderError.Create(Token.Position, AMessage);
+    if Token.Kind <> AKind then
+      raise EShaderError.Create(Token.Position, AMessage);
   end;
+
   function WordIs(const AWord: string): Boolean;
   begin
     Result := (Token.Kind = tkIdentifier) and SameText(Token.Text, AWord);
   end;
+
 begin
   Lexer := TLexer.Create(ADocument);
   Imports := TList<TImport>.Create;
@@ -578,7 +601,8 @@ begin
         if Imports.Count > MaxImportsPerHeader then
           raise EShaderError.Create(Token.Position, 'Uses section exceeds 4096 imports');
         Next;
-        if Token.Kind <> tkComma then Break;
+        if Token.Kind <> tkComma then
+          Break;
         Next;
       until False;
       Require(tkSemicolon, 'Expected ";" after uses');
@@ -588,7 +612,8 @@ begin
     if WordIs('uses') then
       raise EShaderError.Create(Token.Position, 'Only one uses section is supported, before declarations');
     for I := 1 to Last do
-      if ADocument.Text[I] <> #10 then ADocument.Text[I] := ' ';
+      if ADocument.Text[I] <> #10 then
+        ADocument.Text[I] := ' ';
     Result := Imports.ToArray;
   finally
     Imports.Free;
@@ -636,19 +661,24 @@ begin
   try
     Document := ExpandIncludes(FileInfo);
     Imports := ReadHeader(Document, AImport.Name);
-    for Dependency in Imports do LoadModule(Dependency);
+    for Dependency in Imports do
+      LoadModule(Dependency);
     Visible := TList<string>.Create;
     try
       for Dependency in Imports do
         for LibraryDocument in FProgram.Libraries do
           if SameText(Dependency.Name, LibraryDocument.ModuleName) then
           begin
-            if not Visible.Contains(LibraryDocument.ModuleName) then Visible.Add(LibraryDocument.ModuleName);
+            if not Visible.Contains(LibraryDocument.ModuleName) then
+              Visible.Add(LibraryDocument.ModuleName);
             for Name in LibraryDocument.VisibleModules do
             begin
               Duplicate := False;
-              for Existing in Visible do if SameText(Existing, Name) then Duplicate := True;
-              if not Duplicate then Visible.Add(Name);
+              for Existing in Visible do
+                if SameText(Existing, Name) then
+                  Duplicate := True;
+              if not Duplicate then
+                Visible.Add(Name);
             end;
           end;
       Document.VisibleModules := Visible.ToArray;
@@ -679,7 +709,8 @@ begin
     RootFile := ReadFile(TPath.GetFullPath(AFileName), TSourcePosition.Create(1, 1, TPath.GetFullPath(AFileName)), True);
   end;
   FProgram.Root := ExpandIncludes(RootFile);
-  for Dependency in ReadHeader(FProgram.Root, '') do LoadModule(Dependency);
+  for Dependency in ReadHeader(FProgram.Root, '') do
+    LoadModule(Dependency);
   CountDocument(FProgram.Root);
   Result := FProgram;
   FProgram := nil;
@@ -697,8 +728,7 @@ begin
   end;
 end;
 
-function LoadSourceText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>;
-  const ASearchDirectories: TArray<string>): TSourceProgram;
+function LoadSourceText(const ASource, AFileName: string; const ADependencies: TArray<TSourceText>; const ASearchDirectories: TArray<string>): TSourceProgram;
 var
   Loader: TSourceLoader;
 begin
@@ -711,3 +741,4 @@ begin
 end;
 
 end.
+

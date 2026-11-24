@@ -7,14 +7,16 @@ unit PTS.References;
 
 interface
 
-uses PTS.Types, PTS.IR;
+uses
+  PTS.Types, PTS.IR;
 
 type
   TReferenceStep = record
-    Dynamic: Boolean;
+    dynamic: Boolean;
     Index: Cardinal;
     DataType: TShaderType;
   end;
+
   TReferenceShape = class
     RootType: TShaderType;
     RootComposite: TCompositeType;
@@ -22,11 +24,13 @@ type
     Steps: TArray<TReferenceStep>;
     function Clone: TReferenceShape;
   end;
+
   TReferenceBinding = record
     RootID: Cardinal;
     Shape: TReferenceShape; // Non-owning for current function, owned for a call plan.
     Indices: TArray<Cardinal>;
   end;
+
   TFunctionInstance = class
     ShaderFunction: TShaderFunction;
     ID: Cardinal;
@@ -39,14 +43,20 @@ implementation
 function TReferenceShape.Clone: TReferenceShape;
 begin
   Result := TReferenceShape.Create;
-  Result.RootType := RootType; Result.RootComposite := RootComposite; Result.RootStorage := RootStorage;
+  Result.RootType := RootType;
+  Result.RootComposite := RootComposite;
+  Result.RootStorage := RootStorage;
   Result.Steps := Copy(Steps);
 end;
+
 destructor TFunctionInstance.Destroy;
-var S: TReferenceShape;
+var
+  S: TReferenceShape;
 begin
-  for S in Shapes do S.Free;
+  for S in Shapes do
+    S.Free;
   inherited;
 end;
 
 end.
+

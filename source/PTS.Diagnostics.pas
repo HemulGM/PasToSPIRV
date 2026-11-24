@@ -30,11 +30,11 @@ begin
   Result.FileName := AFileName;
 end;
 
-constructor EShaderError.Create(const APosition: TSourcePosition;
-  const AMessage: string);
+constructor EShaderError.Create(const APosition: TSourcePosition; const AMessage: string);
 begin
   inherited Create(AMessage);
   FPosition := APosition;
 end;
 
 end.
+

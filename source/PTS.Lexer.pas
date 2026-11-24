@@ -5,8 +5,7 @@ unit PTS.Lexer;
 interface
 
 uses
-  PTS.Diagnostics,
-  PTS.Source;
+  PTS.Diagnostics, PTS.Source;
 
 type
   TTokenKind = (tkEOF, tkIdentifier, tkInteger, tkReal, tkPlus, tkMinus,
@@ -48,8 +47,7 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  PTS.Names;
+  System.SysUtils, PTS.Names;
 
 function IsDigit(C: Char): Boolean;
 begin
@@ -87,8 +85,10 @@ end;
 
 function TLexer.Position: TSourcePosition;
 begin
-  if FDocument <> nil then Result := FDocument.Position(FLine, FColumn)
-  else Result := TSourcePosition.Create(FLine, FColumn);
+  if FDocument <> nil then
+    Result := FDocument.Position(FLine, FColumn)
+  else
+    Result := TSourcePosition.Create(FLine, FColumn);
 end;
 
 function TLexer.Current: Char;
@@ -143,7 +143,8 @@ begin
     end
     else if Current = '{' then
     begin
-      if Peek = '$' then Break;
+      if Peek = '$' then
+        Break;
       Advance;
       while not CharInSet(Current, [#0, '}']) do
         Advance;
@@ -155,7 +156,8 @@ begin
     end
     else if (Current = '(') and (Peek = '*') then
     begin
-      if (FIndex + 2 <= Length(FSource)) and (FSource[FIndex + 2] = '$') then Break;
+      if (FIndex + 2 <= Length(FSource)) and (FSource[FIndex + 2] = '$') then
+        Break;
       Advance;
       Advance;
       while (Current <> #0) and not ((Current = '*') and (Peek = ')')) do
@@ -184,30 +186,34 @@ begin
   Result.Offset := FIndex;
   Brace := Current = '{';
   Advance;
-  if not Brace then Advance;
+  if not Brace then
+    Advance;
   Advance; // '$'
-  while CharInSet(Current, [' ', #9]) do Advance;
+  while CharInSet(Current, [' ', #9]) do
+    Advance;
   KeywordStart := FIndex;
-  while CharInSet(Current, ['a'..'z', 'A'..'Z']) do Advance;
+  while CharInSet(Current, ['a'..'z', 'A'..'Z']) do
+    Advance;
   Keyword := Copy(FSource, KeywordStart, FIndex - KeywordStart);
   if not SameText(Keyword, 'I') and not SameText(Keyword, 'INCLUDE') then
-    raise EShaderError.Create(Result.Position,
-      'Compiler directives are not supported except $I/$INCLUDE');
+    raise EShaderError.Create(Result.Position, 'Compiler directives are not supported except $I/$INCLUDE');
   Start := FIndex;
   while True do
   begin
     if CharInSet(Current, [#0, #10, #13]) then
       raise EShaderError.Create(Result.Position, 'Unterminated include directive');
-    if (Brace and (Current = '}')) or (not Brace and (Current = '*') and (Peek = ')')) then Break;
+    if (Brace and (Current = '}')) or (not Brace and (Current = '*') and (Peek = ')')) then
+      Break;
     Advance;
   end;
   Path := Trim(Copy(FSource, Start, FIndex - Start));
   Advance;
-  if not Brace then Advance;
+  if not Brace then
+    Advance;
   if (Path = '+') or (Path = '-') then
-    raise EShaderError.Create(Result.Position,
-      'Compiler directives are not supported except $I/$INCLUDE');
-  if Path = '' then raise EShaderError.Create(Result.Position, 'Include filename is empty');
+    raise EShaderError.Create(Result.Position, 'Compiler directives are not supported except $I/$INCLUDE');
+  if Path = '' then
+    raise EShaderError.Create(Result.Position, 'Include filename is empty');
   if CharInSet(Path[1], ['''', '"']) then
   begin
     Quote := Path[1];
@@ -218,7 +224,8 @@ begin
     begin
       if Path[Start] = Quote then
       begin
-        if (Start < Length(Path)) and (Path[Start + 1] = Quote) then Inc(Start)
+        if (Start < Length(Path)) and (Path[Start + 1] = Quote) then
+          Inc(Start)
         else
         begin
           Closed := True;
@@ -253,18 +260,24 @@ var
   Start: TSourcePosition;
 begin
   Result := False;
-  SavedIndex := FIndex; SavedLine := FLine; SavedColumn := FColumn;
+  SavedIndex := FIndex;
+  SavedLine := FLine;
+  SavedColumn := FColumn;
   Start := Position;
   Brace := Current = '{';
   Advance;
-  if not Brace then Advance;
+  if not Brace then
+    Advance;
   Advance; // '$'
   KeywordStart := FIndex;
-  while CharInSet(Current, ['a'..'z', 'A'..'Z']) do Advance;
+  while CharInSet(Current, ['a'..'z', 'A'..'Z']) do
+    Advance;
   Keyword := UpperCase(Copy(FSource, KeywordStart, FIndex - KeywordStart));
   if (Keyword <> 'B') and (Keyword <> 'BOOLEVAL') then
   begin
-    FIndex := SavedIndex; FLine := SavedLine; FColumn := SavedColumn;
+    FIndex := SavedIndex;
+    FLine := SavedLine;
+    FColumn := SavedColumn;
     Exit;
   end;
   if Keyword = 'B' then
@@ -276,16 +289,24 @@ begin
   end
   else
   begin
-    while CharInSet(Current, [' ', #9]) do Advance;
+    while CharInSet(Current, [' ', #9]) do
+      Advance;
     KeywordStart := FIndex;
-    while CharInSet(Current, ['a'..'z', 'A'..'Z']) do Advance;
+    while CharInSet(Current, ['a'..'z', 'A'..'Z']) do
+      Advance;
     Argument := UpperCase(Copy(FSource, KeywordStart, FIndex - KeywordStart));
     if (Argument <> 'ON') and (Argument <> 'OFF') then
       raise EShaderError.Create(Start, 'Expected {$BOOLEVAL ON} or {$BOOLEVAL OFF}');
   end;
-  while CharInSet(Current, [' ', #9]) do Advance;
-  if Brace and (Current = '}') then Advance
-  else if not Brace and (Current = '*') and (Peek = ')') then begin Advance; Advance; end
+  while CharInSet(Current, [' ', #9]) do
+    Advance;
+  if Brace and (Current = '}') then
+    Advance
+  else if not Brace and (Current = '*') and (Peek = ')') then
+  begin
+    Advance;
+    Advance;
+  end
   else
     raise EShaderError.Create(Start, 'Only one $B/$BOOLEVAL switch per directive is supported');
   FCompleteBoolEval := (Argument = '+') or (Argument = 'ON');
@@ -325,8 +346,7 @@ begin
     until not (IsIdentifierStart(Current) or IsDigit(Current));
     Result.Kind := tkIdentifier;
     if FIndex - Start > MaxIdentifierLength then
-      raise EShaderError.Create(Result.Position,
-        Format('Identifiers are limited to %d characters', [MaxIdentifierLength]));
+      raise EShaderError.Create(Result.Position, Format('Identifiers are limited to %d characters', [MaxIdentifierLength]));
   end
   else if IsDigit(C) or (C = '$') then
   begin
@@ -374,18 +394,30 @@ begin
   begin
     Advance;
     case C of
-      '+': Result.Kind := tkPlus;
-      '-': Result.Kind := tkMinus;
-      '*': Result.Kind := tkStar;
-      '/': Result.Kind := tkSlash;
-      '=': Result.Kind := tkEqual;
-      ';': Result.Kind := tkSemicolon;
-      ',': Result.Kind := tkComma;
-      '.': Result.Kind := tkDot;
-      '(': Result.Kind := tkLeftParen;
-      ')': Result.Kind := tkRightParen;
-      '[': Result.Kind := tkLeftBracket;
-      ']': Result.Kind := tkRightBracket;
+      '+':
+        Result.Kind := tkPlus;
+      '-':
+        Result.Kind := tkMinus;
+      '*':
+        Result.Kind := tkStar;
+      '/':
+        Result.Kind := tkSlash;
+      '=':
+        Result.Kind := tkEqual;
+      ';':
+        Result.Kind := tkSemicolon;
+      ',':
+        Result.Kind := tkComma;
+      '.':
+        Result.Kind := tkDot;
+      '(':
+        Result.Kind := tkLeftParen;
+      ')':
+        Result.Kind := tkRightParen;
+      '[':
+        Result.Kind := tkLeftBracket;
+      ']':
+        Result.Kind := tkRightBracket;
       ':':
         if Current = '=' then
         begin
@@ -416,8 +448,7 @@ begin
         else
           Result.Kind := tkGreater;
     else
-      raise EShaderError.Create(Result.Position,
-        Format('Unsupported character "%s"', [C]));
+      raise EShaderError.Create(Result.Position, Format('Unsupported character "%s"', [C]));
     end;
   end;
   Result.Text := Copy(FSource, Start, FIndex - Start);
@@ -425,3 +456,4 @@ begin
 end;
 
 end.
+

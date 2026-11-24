@@ -15,9 +15,7 @@ procedure CheckDefiniteAssignment(AFunction: TShaderFunction);
 implementation
 
 uses
-  System.SysUtils,
-  System.Generics.Collections,
-  PTS.FlowAnalysis,
+  System.SysUtils, System.Generics.Collections, PTS.FlowAnalysis,
   PTS.Diagnostics;
 
 type
@@ -78,7 +76,8 @@ end;
 function TChecker.Empty: TBitSet;
 begin
   SetLength(Result, FWords);
-  if FWords > 0 then FillChar(Result[0], FWords * SizeOf(UInt64), 0);
+  if FWords > 0 then
+    FillChar(Result[0], FWords * SizeOf(UInt64), 0);
 end;
 
 function TChecker.Full: TBitSet;
@@ -86,7 +85,8 @@ var
   I: Integer;
 begin
   SetLength(Result, FWords);
-  for I := 0 to FWords - 1 do Result[I] := High(UInt64);
+  for I := 0 to FWords - 1 do
+    Result[I] := High(UInt64);
 end;
 
 function TChecker.Copy(const A: TBitSet): TBitSet;
@@ -99,7 +99,8 @@ var
   I: Integer;
 begin
   SetLength(Result, FWords);
-  for I := 0 to FWords - 1 do Result[I] := A[I] and B[I];
+  for I := 0 to FWords - 1 do
+    Result[I] := A[I] and B[I];
 end;
 
 function TChecker.OrSet(const A, B: TBitSet): TBitSet;
@@ -107,7 +108,8 @@ var
   I: Integer;
 begin
   SetLength(Result, FWords);
-  for I := 0 to FWords - 1 do Result[I] := A[I] or B[I];
+  for I := 0 to FWords - 1 do
+    Result[I] := A[I] or B[I];
 end;
 
 procedure TChecker.Include(var A: TBitSet; I: Integer);
@@ -136,7 +138,8 @@ var
   A, B: TSummary;
   I: Integer;
 begin
-  if FSummaries.TryGetValue(AStatement, Result) then Exit;
+  if FSummaries.TryGetValue(AStatement, Result) then
+    Exit;
   Result.Preserve := Full;
   Result.Generate := Empty;
   case AStatement.Kind of
@@ -153,10 +156,15 @@ begin
     skIf:
       begin
         A := Summary(AStatement.ThenPart);
-        if AStatement.ElsePart <> nil then B := Summary(AStatement.ElsePart)
-        else begin B.Preserve := Full; B.Generate := Empty; end;
+        if AStatement.ElsePart <> nil then
+          B := Summary(AStatement.ElsePart)
+        else
+        begin
+          B.Preserve := Full;
+          B.Generate := Empty;
+        end;
         Result.Preserve := OrSet(OrSet(AndSet(A.Preserve, B.Preserve),
-          AndSet(A.Preserve, B.Generate)), AndSet(A.Generate, B.Preserve));
+            AndSet(A.Preserve, B.Generate)), AndSet(A.Generate, B.Preserve));
         Result.Generate := AndSet(A.Generate, B.Generate);
       end;
     skWhile:
@@ -168,7 +176,8 @@ begin
       begin
         A := Summary(AStatement.Body);
         Result.Preserve := OrSet(A.Preserve, A.Generate);
-        if Tracked(AStatement.Target.Variable, I) then Exclude(Result.Preserve, I);
+        if Tracked(AStatement.Target.Variable, I) then
+          Exclude(Result.Preserve, I);
       end;
   end;
   FSummaries.Add(AStatement, Result);
@@ -179,20 +188,21 @@ var
   I: Integer;
 begin
   if Tracked(AExpression.Variable, I) and not Contains(AState, I) then
-    raise EShaderError.Create(AExpression.Position, Format(
-      'Local variable "%s" may be uninitialized (including on a later loop iteration); aggregates must be initialized as a whole',
-      [AExpression.Variable.Name]));
+    raise EShaderError.Create(AExpression.Position, Format('Local variable "%s" may be uninitialized (including on a later loop iteration); aggregates must be initialized as a whole', [AExpression.Variable.Name]));
 end;
 
 procedure TChecker.CheckExpression(AExpression: TExpression; const AState: TBitSet);
 var
   Argument: TExpression;
 begin
-  if AExpression = nil then Exit;
-  if AExpression.Kind = ekLocal then CheckRead(AExpression, AState);
+  if AExpression = nil then
+    Exit;
+  if AExpression.Kind = ekLocal then
+    CheckRead(AExpression, AState);
   CheckExpression(AExpression.Left, AState);
   CheckExpression(AExpression.Right, AState);
-  for Argument in AExpression.Arguments do CheckExpression(Argument, AState);
+  for Argument in AExpression.Arguments do
+    CheckExpression(Argument, AState);
 end;
 
 procedure TChecker.CheckLValue(AExpression: TExpression; const AState: TBitSet);
@@ -203,8 +213,10 @@ begin
     CheckExpression(AExpression.Right, AState);
     AExpression := AExpression.Left;
   end;
-  if AExpression.Kind = ekLocal then CheckRead(AExpression, AState)
-  else CheckExpression(AExpression, AState);
+  if AExpression.Kind = ekLocal then
+    CheckRead(AExpression, AState)
+  else
+    CheckExpression(AExpression, AState);
 end;
 
 procedure TChecker.Walk(AStatement: TStatement; var AState: TBitSet);
@@ -216,15 +228,18 @@ var
 begin
   case AStatement.Kind of
     skBlock:
-      for Child in AStatement.Children do Walk(Child, AState);
+      for Child in AStatement.Children do
+        Walk(Child, AState);
     skAssign:
       begin
         CheckExpression(AStatement.Value, AState);
         if AStatement.Target.Kind = ekLocal then
         begin
-          if Tracked(AStatement.Target.Variable, I) then Include(AState, I);
+          if Tracked(AStatement.Target.Variable, I) then
+            Include(AState, I);
         end
-        else CheckLValue(AStatement.Target, AState);
+        else
+          CheckLValue(AStatement.Target, AState);
       end;
     skEvaluate:
       CheckExpression(AStatement.Value, AState);
@@ -234,7 +249,8 @@ begin
         ThenState := Copy(AState);
         Walk(AStatement.ThenPart, ThenState);
         ElseState := Copy(AState);
-        if AStatement.ElsePart <> nil then Walk(AStatement.ElsePart, ElseState);
+        if AStatement.ElsePart <> nil then
+          Walk(AStatement.ElsePart, ElseState);
         AState := AndSet(ThenState, ElseState);
       end;
     skWhile:
@@ -253,10 +269,12 @@ begin
         Loop := Summary(AStatement.Body);
         Head := AndSet(AState, OrSet(Loop.Preserve, Loop.Generate));
         Body := Copy(Head);
-        if Tracked(AStatement.Target.Variable, I) then Include(Body, I);
+        if Tracked(AStatement.Target.Variable, I) then
+          Include(Body, I);
         Walk(AStatement.Body, Body);
         AState := Head;
-        if Tracked(AStatement.Target.Variable, I) then Exclude(AState, I);
+        if Tracked(AStatement.Target.Variable, I) then
+          Exclude(AState, I);
       end;
   end;
 end;
@@ -266,12 +284,12 @@ var
   State: TBitSet;
   I: Integer;
 begin
-  if FFunction.Body = nil then Exit;
+  if FFunction.Body = nil then
+    Exit;
   State := Empty;
   Walk(FFunction.Body, State);
   if Tracked(FFunction.ResultVariable, I) and not Contains(State, I) then
-    raise EShaderError.Create(FFunction.Position, Format(
-      'Function "%s" may return an uninitialized Result', [FFunction.Name]));
+    raise EShaderError.Create(FFunction.Position, Format('Function "%s" may return an uninitialized Result', [FFunction.Name]));
 end;
 
 procedure CheckDefiniteAssignment(AFunction: TShaderFunction);
@@ -292,3 +310,4 @@ begin
 end;
 
 end.
+

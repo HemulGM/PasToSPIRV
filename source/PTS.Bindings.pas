@@ -8,15 +8,13 @@ uses
   PTS.IR;
 
 function GenerateBindings(AModule: TShaderModule; const AUnitName: string): string;
+
 procedure ValidateUnitName(const AName: string);
 
 implementation
 
 uses
-  System.SysUtils,
-  System.Generics.Collections,
-  PTS.Types,
-  PTS.Layout;
+  System.SysUtils, System.Generics.Collections, PTS.Types, PTS.Layout;
 
 type
   TBindingsWriter = class
@@ -82,10 +80,14 @@ end;
 
 function TBindingsWriter.HostType(AType: TShaderType; AComposite: TCompositeType): string;
 begin
-  if AType = stComposite then Result := 'TPTS_Type' + IntToStr(AComposite.ID)
-  else if ComponentCount(AType) > 1 then Result := 'TPTS_' + ShaderTypeName(AType)
+  if AType = stComposite then
+    Result := 'TPTS_Type' + IntToStr(AComposite.ID)
+  else if ComponentCount(AType) > 1 then
+    Result := 'TPTS_' + ShaderTypeName(AType)
+
   // Qualified: a generated unit may itself be named Byte, Word, Double, etc.
-  else Result := 'System.' + ShaderTypeName(AType);
+  else
+    Result := 'System.' + ShaderTypeName(AType);
 end;
 
 procedure TBindingsWriter.DeclareType(AComposite: TCompositeType);
@@ -95,15 +97,18 @@ var
   Cursor, Padding: Cardinal;
   PadIndex: Integer;
 begin
-  if FDone.Contains(AComposite) then Exit;
+  if FDone.Contains(AComposite) then
+    Exit;
   if AComposite.Kind = ctArray then
   begin
-    if AComposite.ElementComposite <> nil then DeclareType(AComposite.ElementComposite);
+    if AComposite.ElementComposite <> nil then
+      DeclareType(AComposite.ElementComposite);
     Element := HostType(AComposite.ElementType, AComposite.ElementComposite);
   end
   else
     for Field in AComposite.Fields do
-      if Field.Composite <> nil then DeclareType(Field.Composite);
+      if Field.Composite <> nil then
+        DeclareType(Field.Composite);
   Name := HostType(stComposite, AComposite);
   Line('  // ' + AComposite.Name + ': std430, size ' + IntToStr(AComposite.Size) +
     ', alignment ' + IntToStr(AComposite.Alignment));
@@ -176,15 +181,18 @@ begin
   begin
     Line('  ' + HostType(DataType, nil) + ' = packed record');
     Width := ComponentCount(DataType);
-    for I := 0 to Width - 1 do Line('    ' + Components[I] + ': System.' + ShaderTypeName(ComponentType(DataType)) + ';');
+    for I := 0 to Width - 1 do
+      Line('    ' + Components[I] + ': System.' + ShaderTypeName(ComponentType(DataType)) + ';');
     Line('  end;');
   end;
   Line;
   for Composite in FModule.Types do
-    if Composite.ExternalLayout then DeclareType(Composite);
+    if Composite.ExternalLayout then
+      DeclareType(Composite);
   for Variable in FModule.Resources do
   begin
-    if not (Variable.Kind in [vkBuffer,vkPushConstant]) then Continue;
+    if not (Variable.Kind in [vkBuffer, vkPushConstant]) then
+      Continue;
     Element := HostType(Variable.DataType, Variable.Composite);
     if Variable.Kind = vkBuffer then
     begin
@@ -197,9 +205,11 @@ begin
         Line('    PTS_Padding: array[0..' + IntToStr(Padding - 1) + '] of System.Byte;');
         Line('  end;');
       end
-      else Line('  ' + Name + ' = ' + Element + ';');
+      else
+        Line('  ' + Name + ' = ' + Element + ';');
     end
-    else Line('  TPTS_Push_' + Variable.Name + ' = ' + Element + ';');
+    else
+      Line('  TPTS_Push_' + Variable.Name + ' = ' + Element + ';');
   end;
   Line;
   Line('const');
@@ -222,7 +232,7 @@ begin
   begin
     if Variable.Kind in [vkInput, vkOutput] then
       Continue;
-    if Variable.Kind in [vkImage,vkTexture,vkSampler] then
+    if Variable.Kind in [vkImage, vkTexture, vkSampler] then
     begin
       Prefix := 'PTS_Descriptor_' + Variable.Name;
       Line('  ' + Prefix + '_Set = ' + IntToStr(Variable.DescriptorSet) + ';');
@@ -258,7 +268,8 @@ begin
   Line;
   Line('procedure PTS_ValidateLayouts;');
   Line('begin');
-  for DataType := stInteger2 to stSingle4 do CheckSize(HostType(DataType, nil), TypeSize(DataType, nil));
+  for DataType := stInteger2 to stSingle4 do
+    CheckSize(HostType(DataType, nil), TypeSize(DataType, nil));
   for Composite in FDone do
   begin
     Name := HostType(stComposite, Composite);
@@ -276,7 +287,8 @@ begin
   for Variable in FModule.Resources do
     if Variable.Kind = vkBuffer then
       CheckSize('TPTS_Buffer_' + Variable.Name + '_Element', ArrayStride(Variable.DataType, Variable.Composite))
-    else if Variable.Kind = vkPushConstant then CheckSize('TPTS_Push_' + Variable.Name, TypeSize(Variable.DataType, Variable.Composite));
+    else if Variable.Kind = vkPushConstant then
+      CheckSize('TPTS_Push_' + Variable.Name, TypeSize(Variable.DataType, Variable.Composite));
   Line('end;');
   Line;
   Line('end.');
@@ -296,3 +308,4 @@ begin
 end;
 
 end.
+

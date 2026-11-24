@@ -15,7 +15,13 @@ interface
   {$DEFINE PTS_DIRECT_X87}
 {$ENDIF}
 
+{$IFNDEF PTS_DIRECT_MXCSR}
+uses
+  System.Math;
+{$ENDIF}
+
 {$IFDEF PTS_DIRECT_MXCSR}
+
 type
   TCompilerFloatState = record
     MXCSR: Cardinal;
@@ -25,7 +31,7 @@ type
     {$ENDIF}
   end;
 {$ELSE}
-uses System.Math;
+
 type
   TCompilerFloatState = record
     Rounding: TRoundingMode;
@@ -35,10 +41,12 @@ type
 {$ENDIF}
 
 function EnterCompilerFloatEnvironment: TCompilerFloatState;
+
 procedure LeaveCompilerFloatEnvironment(const AState: TCompilerFloatState);
 // Handling an exception may make the RTL reload its process-wide defaults. A
 // handler that lets compilation continue calls this first. No effect outside
 // EnterCompilerFloatEnvironment/LeaveCompilerFloatEnvironment.
+
 procedure PinCompilerFloatEnvironment;
 
 implementation
@@ -56,34 +64,36 @@ const
 {$IFDEF CPUX64}
 function ReadMXCSR: Cardinal;
 asm
-        .NOFRAME
-        STMXCSR DWORD PTR [RSP+8]
-        MOV     EAX, DWORD PTR [RSP+8]
+        .       NOFRAME
+        STMXCSR DWORD PTR[RSP + 8]
+        MOV     EAX, DWORD PTR[RSP + 8]
 end;
 
 procedure WriteMXCSR(AValue: Cardinal);
 asm
-        .NOFRAME
-        MOV     DWORD PTR [RSP+8], ECX
-        LDMXCSR DWORD PTR [RSP+8]
+        .       NOFRAME
+        MOV     DWORD PTR[RSP + 8], ECX
+        LDMXCSR DWORD PTR[RSP + 8]
 end;
 {$ELSE}
+
 function ReadMXCSR: Cardinal;
 asm
         PUSH    EAX
-        STMXCSR DWORD PTR [ESP]
+        STMXCSR DWORD PTR[ESP]
         POP     EAX
 end;
 
 procedure WriteMXCSR(AValue: Cardinal);
 asm
         PUSH    EAX
-        LDMXCSR DWORD PTR [ESP]
+        LDMXCSR DWORD PTR[ESP]
         POP     EAX
 end;
 {$ENDIF}
 
 {$IFDEF PTS_DIRECT_X87}
+
 const
   // x87 nearest-even, 53-bit precision, all exceptions masked: conversions and
   // comparisons. Constant arithmetic itself uses SSE2 (PTS.ConstEval), because
@@ -98,7 +108,7 @@ end;
 procedure LoadControlWord(AValue: Cardinal);
 asm
         PUSH    EAX
-        FLDCW   WORD PTR [ESP]
+        FLDCW   WORD PTR[ESP]
         POP     EAX
 end;
 
@@ -137,9 +147,10 @@ begin
   WriteMXCSR(AState.MXCSR);
 end;
 {$ELSE}
+
 procedure Pin;
 begin
-  SetExceptionMask([exInvalidOp,exDenormalized,exZeroDivide,exOverflow,exUnderflow,exPrecision]);
+  SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow, exUnderflow, exPrecision]);
   SetRoundMode(rmNearest);
 end;
 
@@ -170,3 +181,4 @@ begin
 end;
 
 end.
+

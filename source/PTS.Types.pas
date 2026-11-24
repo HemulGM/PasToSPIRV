@@ -3,13 +3,13 @@ unit PTS.Types;
 interface
 
 uses
-  System.Generics.Collections,
-  PTS.Diagnostics;
+  System.Generics.Collections, PTS.Diagnostics;
 
 type
   TShaderType = (stVoid, stInteger, stCardinal, stSingle, stBoolean,
     stInteger2, stInteger3, stInteger4, stCardinal2, stCardinal3, stCardinal4,
     stSingle2, stSingle3, stSingle4, stByte, stWord, stInt64, stUInt64, stDouble,
+
     // Enumeration value (Composite = ctEnum descriptor) and set of such an
     // enumeration (Composite = element enum, nil for the untyped []); both are
     // 32-bit unsigned words in SPIR-V and have no external layout.
@@ -17,12 +17,14 @@ type
     stComposite);
 
   TCompositeType = class;
+
   TTypeReference = record
     DataType: TShaderType;
     Composite: TCompositeType;
     ModuleName: string;
   end;
   // ctEnum: Fields are the enumerators (Name, Offset = ordinal value).
+
   TCompositeKind = (ctRecord, ctArray, ctEnum);
 
   TTypeField = class
@@ -54,23 +56,40 @@ type
   end;
 
 function ShaderTypeName(AType: TShaderType): string;
+
 function TryShaderType(const AName: string; out AType: TShaderType): Boolean;
+
 function ComponentType(AType: TShaderType): TShaderType;
+
 function ComponentCount(AType: TShaderType): Integer;
+
 function VectorType(ABase: TShaderType; ACount: Integer): TShaderType;
+
 function IsIntegerType(AType: TShaderType): Boolean;
+
 function IsScalarIntegerType(AType: TShaderType): Boolean;
+
 function IsNumericType(AType: TShaderType): Boolean;
+
 function IsFloatType(AType: TShaderType): Boolean;
+
 function IsSignedInteger(AType: TShaderType): Boolean;
+
 function ScalarBitWidth(AType: TShaderType): Integer;
+
 function IntegerMask(AType: TShaderType): UInt64;
+
 function SignedValue(ABits: UInt64; AType: TShaderType): Int64;
+
 function IntegerCastBits(ABits: UInt64; ASource, ATarget: TShaderType): UInt64;
+
 function TypeReferenceName(AType: TShaderType; AComposite: TCompositeType): string;
 // Integers and enumerations (Ord, Succ/Pred, case, for, sets).
+
 function IsOrdinalType(AType: TShaderType): Boolean;
+
 function EnumLow(AComposite: TCompositeType): Cardinal;
+
 function EnumHigh(AComposite: TCompositeType): Cardinal;
 
 implementation
@@ -105,10 +124,14 @@ end;
 function ComponentType(AType: TShaderType): TShaderType;
 begin
   case AType of
-    stComposite: Result := stVoid;
-    stInteger2..stInteger4: Result := stInteger;
-    stCardinal2..stCardinal4: Result := stCardinal;
-    stSingle2..stSingle4: Result := stSingle;
+    stComposite:
+      Result := stVoid;
+    stInteger2..stInteger4:
+      Result := stInteger;
+    stCardinal2..stCardinal4:
+      Result := stCardinal;
+    stSingle2..stSingle4:
+      Result := stSingle;
   else
     Result := AType;
   end;
@@ -133,9 +156,12 @@ begin
   if (ACount < 2) or (ACount > 4) then
     raise EArgumentException.Create('Internal error: invalid vector width');
   case ABase of
-    stInteger: First := stInteger2;
-    stCardinal: First := stCardinal2;
-    stSingle: First := stSingle2;
+    stInteger:
+      First := stInteger2;
+    stCardinal:
+      First := stCardinal2;
+    stSingle:
+      First := stSingle2;
   else
     raise EArgumentException.Create('Internal error: invalid vector component type');
   end;
@@ -170,17 +196,23 @@ end;
 function ScalarBitWidth(AType: TShaderType): Integer;
 begin
   case ComponentType(AType) of
-    stByte: Result := 8;
-    stWord: Result := 16;
-    stInt64, stUInt64, stDouble: Result := 64;
-  else Result := 32;
+    stByte:
+      Result := 8;
+    stWord:
+      Result := 16;
+    stInt64, stUInt64, stDouble:
+      Result := 64;
+  else
+    Result := 32;
   end;
 end;
 
 function IntegerMask(AType: TShaderType): UInt64;
 begin
-  if ScalarBitWidth(AType) = 64 then Result := High(UInt64)
-  else Result := (UInt64(1) shl ScalarBitWidth(AType)) - 1;
+  if ScalarBitWidth(AType) = 64 then
+    Result := High(UInt64)
+  else
+    Result := (UInt64(1) shl ScalarBitWidth(AType)) - 1;
 end;
 
 function SignedValue(ABits: UInt64; AType: TShaderType): Int64;
@@ -205,12 +237,17 @@ end;
 
 function TypeReferenceName(AType: TShaderType; AComposite: TCompositeType): string;
 begin
-  if AType in [stComposite, stEnum] then Result := AComposite.Name
+  if AType in [stComposite, stEnum] then
+    Result := AComposite.Name
   else if AType = stSet then
   begin
-    if AComposite = nil then Result := '[]' else Result := 'set of ' + AComposite.Name;
+    if AComposite = nil then
+      Result := '[]'
+    else
+      Result := 'set of ' + AComposite.Name;
   end
-  else Result := ShaderTypeName(AType);
+  else
+    Result := ShaderTypeName(AType);
 end;
 
 function IsOrdinalType(AType: TShaderType): Boolean;
@@ -219,17 +256,23 @@ begin
 end;
 
 function EnumLow(AComposite: TCompositeType): Cardinal;
-var Field: TTypeField;
+var
+  Field: TTypeField;
 begin
   Result := High(Cardinal);
-  for Field in AComposite.Fields do if Field.Offset < Result then Result := Field.Offset;
+  for Field in AComposite.Fields do
+    if Field.Offset < Result then
+      Result := Field.Offset;
 end;
 
 function EnumHigh(AComposite: TCompositeType): Cardinal;
-var Field: TTypeField;
+var
+  Field: TTypeField;
 begin
   Result := 0;
-  for Field in AComposite.Fields do if Field.Offset > Result then Result := Field.Offset;
+  for Field in AComposite.Fields do
+    if Field.Offset > Result then
+      Result := Field.Offset;
 end;
 
 constructor TCompositeType.Create;
@@ -245,3 +288,4 @@ begin
 end;
 
 end.
+

@@ -1,18 +1,12 @@
-unit PTS.Parser;
+﻿unit PTS.Parser;
 
 {$BOOLEVAL OFF}
 
 interface
 
 uses
-  System.Generics.Collections,
-  PTS.Diagnostics,
-  PTS.Types,
-  PTS.Layout,
-  PTS.Features,
-  PTS.Source,
-  PTS.IR,
-  PTS.Lexer;
+  System.Generics.Collections, PTS.Diagnostics, PTS.Types, PTS.Layout,
+  PTS.Features, PTS.Source, PTS.IR, PTS.Lexer;
 
 type
   TAttributes = record
@@ -129,8 +123,7 @@ type
     function ParseConstruct(AType: TShaderType): TExpression;
     function ParseDefault: TExpression;
     function ParseBuiltin: TExpression;
-    function MakeConstant(AType: TShaderType; ABits: UInt64; AAdaptable: Boolean;
-      const APosition: TSourcePosition): TExpression;
+    function MakeConstant(AType: TShaderType; ABits: UInt64; AAdaptable: Boolean; const APosition: TSourcePosition): TExpression;
     function ParseIntrinsic(AIntrinsic: TIntrinsic): TExpression;
     function ParseNumericIntrinsic(AIntrinsic: TIntrinsic): TExpression;
     function ParseAtomic: TExpression;
@@ -139,12 +132,9 @@ type
     function ParseReference(AForWrite: Boolean; const AOwner: string = ''): TExpression;
     procedure CheckWriteTarget(ATarget: TExpression);
     function ParseCall(ACallee: TShaderFunction): TExpression;
-    function MakeBinary(AOperation: TOperator; ALeft, ARight: TExpression;
-      const APosition: TSourcePosition): TExpression;
-    procedure MakeOrdinalBinary(AResult: TExpression; AOperation: TOperator;
-      const APosition: TSourcePosition);
-    procedure Convert(var AExpression: TExpression; AType: TShaderType;
-      AExplicit: Boolean = False; AComposite: TCompositeType = nil);
+    function MakeBinary(AOperation: TOperator; ALeft, ARight: TExpression; const APosition: TSourcePosition): TExpression;
+    procedure MakeOrdinalBinary(AResult: TExpression; AOperation: TOperator; const APosition: TSourcePosition);
+    procedure Convert(var AExpression: TExpression; AType: TShaderType; AExplicit: Boolean = False; AComposite: TCompositeType = nil);
     procedure Splat(var AExpression: TExpression; ACount: Integer);
     procedure UnifyNumeric(var ALeft, ARight: TExpression; ABroadcast: Boolean = False);
     function Snapshot: TArray<Boolean>;
@@ -161,20 +151,14 @@ type
 implementation
 
 uses
-  System.SysUtils,
-  System.Math,
-  PTS.ConstEval,
-  PTS.Names,
-  PTS.Analysis,
-  PTS.Profile,
-  PTS.FloatLiteral;
+  System.SysUtils, System.Math, PTS.ConstEval, PTS.Names, PTS.Analysis,
+  PTS.Profile, PTS.FloatLiteral;
 
 const
   MaxResources = 4096;
   MaxFunctionVariables = 4096;
   MaxRoutineNesting = 32;
 // Constant evaluation is shared with the conservative optional optimizer.
-
 
 function TryIntrinsic(const AName: string; out AIntrinsic: TIntrinsic): Boolean;
 const
@@ -198,11 +182,15 @@ end;
 
 function TreeAdaptable(AExpression: TExpression): Boolean;
 begin
-  if AExpression.ExplicitType then Exit(False);
+  if AExpression.ExplicitType then
+    Exit(False);
   case AExpression.Kind of
-    ekConstant: Result := AExpression.Adaptable;
-    ekUnary: Result := TreeAdaptable(AExpression.Left);
-    ekBinary: Result := TreeAdaptable(AExpression.Left) and TreeAdaptable(AExpression.Right);
+    ekConstant:
+      Result := AExpression.Adaptable;
+    ekUnary:
+      Result := TreeAdaptable(AExpression.Left);
+    ekBinary:
+      Result := TreeAdaptable(AExpression.Left) and TreeAdaptable(AExpression.Right);
   else
     Result := False;
   end;
@@ -211,35 +199,47 @@ end;
 // No calls, resource/memory reads that could fault, atomics or images: skipping
 // it cannot be observed, so a short-circuit and/or may use OpLogicalAnd/Or.
 function PureOperand(E: TExpression): Boolean;
-var A: TExpression;
+var
+  A: TExpression;
 begin
-  if E = nil then Exit(True);
+  if E = nil then
+    Exit(True);
   case E.Kind of
-    ekConstant, ekDefault, ekInvocationID, ekPushConstant: Result := True;
-    ekLocal: Result := E.Variable.Kind in [vkLocal, vkParameter, vkResult];
-    ekIndex: Result := E.ConstantIndex and PureOperand(E.Left);
-    ekUnary, ekBinary, ekConvert, ekComponent, ekField, ekConstruct, ekSwizzle,
-    ekConditional, ekInSet, ekRange:
+    ekConstant, ekDefault, ekInvocationID, ekPushConstant:
+      Result := True;
+    ekLocal:
+      Result := E.Variable.Kind in [vkLocal, vkParameter, vkResult];
+    ekIndex:
+      Result := E.ConstantIndex and PureOperand(E.Left);
+    ekUnary, ekBinary, ekConvert, ekComponent, ekField, ekConstruct, ekSwizzle, ekConditional, ekInSet, ekRange:
       begin
         // Integer div/mod by zero and out-of-range float->integer conversion are
         // undefined behavior in SPIR-V: such operands must really be skipped.
-        if (E.Kind = ekBinary) and (E.Operation in [opIntDivide, opModulo]) then Exit(False);
-        if (E.Kind = ekConvert) and IsFloatType(E.Left.DataType) and not IsFloatType(E.DataType) then Exit(False);
-        if not (PureOperand(E.Left) and PureOperand(E.Right)) then Exit(False);
-        for A in E.Arguments do if not PureOperand(A) then Exit(False);
+        if (E.Kind = ekBinary) and (E.Operation in [opIntDivide, opModulo]) then
+          Exit(False);
+        if (E.Kind = ekConvert) and IsFloatType(E.Left.DataType) and not IsFloatType(E.DataType) then
+          Exit(False);
+        if not (PureOperand(E.Left) and PureOperand(E.Right)) then
+          Exit(False);
+        for A in E.Arguments do
+          if not PureOperand(A) then
+            Exit(False);
         Result := True;
       end;
-  else Result := False;
+  else
+    Result := False;
   end;
 end;
 
 function TryIntegerConstant(AExpression: TExpression; out AValue: Int64): Boolean;
 begin
   Result := False;
-  if not IsScalarIntegerType(AExpression.DataType) then Exit;
+  if not IsScalarIntegerType(AExpression.DataType) then
+    Exit;
   if AExpression.Kind = ekConstant then
   begin
-    if (AExpression.DataType = stUInt64) and (AExpression.Bits > UInt64(High(Int64))) then Exit;
+    if (AExpression.DataType = stUInt64) and (AExpression.Bits > UInt64(High(Int64))) then
+      Exit;
     AValue := SignedValue(AExpression.Bits, AExpression.DataType);
     Exit(True);
   end;
@@ -290,15 +290,18 @@ begin
     Keys := TList<string>.Create;
     FShortNames.Add(LowerCase(AName), Keys);
   end;
-  if not Keys.Contains(AKey) then Keys.Add(AKey);
+  if not Keys.Contains(AKey) then
+    Keys.Add(AKey);
 end;
 
 function TParser.ExportKeys(const AName: string): TArray<string>;
 var
   Keys: TList<string>;
 begin
-  if FShortNames.TryGetValue(LowerCase(AName), Keys) then Result := Keys.ToArray
-  else Result := nil;
+  if FShortNames.TryGetValue(LowerCase(AName), Keys) then
+    Result := Keys.ToArray
+  else
+    Result := nil;
 end;
 
 procedure TParser.CheckConstantIndex(AIndex: TExpression; ALength: Int64);
@@ -307,8 +310,10 @@ var
   Index: Int64;
 begin
   // The same evaluator drives O1, so anything it may fold is checked here.
-  if not EvaluateConstant(AIndex, Value) then Exit;
-  if IsSignedInteger(Value.DataType) then Index := SignedValue(Value.Bits, Value.DataType)
+  if not EvaluateConstant(AIndex, Value) then
+    Exit;
+  if IsSignedInteger(Value.DataType) then
+    Index := SignedValue(Value.Bits, Value.DataType)
   else
   begin
     if Value.Bits > UInt64(High(Int64)) then
@@ -323,13 +328,18 @@ end;
 
 function TParser.CurrentOwner: string;
 begin
-  if FActiveLibrary = nil then Result := '@root' else Result := FActiveLibrary.ModuleName;
+  if FActiveLibrary = nil then
+    Result := '@root'
+  else
+    Result := FActiveLibrary.ModuleName;
 end;
 
 function TParser.SymbolKey(const AOwner, AName: string): string;
 begin
-  if AOwner = '@root' then Result := '.' + LowerCase(AName)
-  else Result := LowerCase(AOwner + '.' + AName);
+  if AOwner = '@root' then
+    Result := '.' + LowerCase(AName)
+  else
+    Result := LowerCase(AOwner + '.' + AName);
 end;
 
 function TParser.PeekToken: TToken;
@@ -343,86 +353,134 @@ begin
 end;
 
 function TParser.ReadOwnerPrefix(ATypeContext: Boolean): string;
-var D: TSourceDocument;
+var
+  D: TSourceDocument;
 begin
   Result := '';
-  if (FProgram = nil) or (FToken.Kind <> tkIdentifier) then Exit;
+  if (FProgram = nil) or (FToken.Kind <> tkIdentifier) then
+    Exit;
   if not ATypeContext and (FLocalSymbols.ContainsKey(LowerCase(FToken.Text)) or
-    FSymbols.ContainsKey(LowerCase(FToken.Text))) then Exit;
-  if PeekToken.Kind <> tkDot then Exit;
+    FSymbols.ContainsKey(LowerCase(FToken.Text))) then
+    Exit;
+  if PeekToken.Kind <> tkDot then
+    Exit;
   for D in FProgram.Libraries do
     if SameText(D.ModuleName, FToken.Text) then
     begin
-      if not ModuleVisible(D.ModuleName) then Fail('Module is not visible; add it to uses');
+      if not ModuleVisible(D.ModuleName) then
+        Fail('Module is not visible; add it to uses');
       Result := D.ModuleName;
-      Next; Expect(tkDot, '"."');
-      if FToken.Kind <> tkIdentifier then Fail('Expected an exported identifier after module name');
+      Next;
+      Expect(tkDot, '"."');
+      if FToken.Kind <> tkIdentifier then
+        Fail('Expected an exported identifier after module name');
       Exit;
     end;
 end;
 
 function TParser.FindType(const AName, AOwner: string; out AReference: TTypeReference; AReportScope: Boolean): Boolean;
-var Key: string; Candidate: TTypeReference; Count: Integer; Seen: Boolean;
+var
+  Key: string;
+  Candidate: TTypeReference;
+  Count: Integer;
+  Seen: Boolean;
 begin
   if AOwner <> '' then
   begin
-    if (AOwner <> '@root') and not ModuleVisible(AOwner) then Fail('Module is not visible; add it to uses');
+    if (AOwner <> '@root') and not ModuleVisible(AOwner) then
+      Fail('Module is not visible; add it to uses');
     Exit(FNamedTypes.TryGetValue(SymbolKey(AOwner, AName), AReference));
   end;
-  if FNamedTypes.TryGetValue(SymbolKey(CurrentOwner, AName), AReference) then Exit(True);
-  Count := 0; Seen := False;
+  if FNamedTypes.TryGetValue(SymbolKey(CurrentOwner, AName), AReference) then
+    Exit(True);
+  Count := 0;
+  Seen := False;
   for Key in ExportKeys(AName) do
     if FNamedTypes.TryGetValue(Key, Candidate) then
     begin
       Seen := True;
-      if ModuleVisible(Candidate.ModuleName) then begin AReference := Candidate; Inc(Count); end;
+      if ModuleVisible(Candidate.ModuleName) then
+      begin
+        AReference := Candidate;
+        Inc(Count);
+      end;
     end;
-  if Count > 1 then Fail('Ambiguous type name; use Module.Type');
-  if (Count = 0) and Seen and AReportScope then Fail('Type belongs to another module; add it to uses');
+  if Count > 1 then
+    Fail('Ambiguous type name; use Module.Type');
+  if (Count = 0) and Seen and AReportScope then
+    Fail('Type belongs to another module; add it to uses');
   Result := Count = 1;
 end;
 
 function TParser.FindFunction(const AName, AOwner: string; out AFunction: TShaderFunction; AReportScope: Boolean): Boolean;
-var Key: string; Candidate: TShaderFunction; Count: Integer; Seen: Boolean;
+var
+  Key: string;
+  Candidate: TShaderFunction;
+  Count: Integer;
+  Seen: Boolean;
 begin
   if AOwner <> '' then
   begin
-    if (AOwner <> '@root') and not ModuleVisible(AOwner) then Fail('Module is not visible; add it to uses');
+    if (AOwner <> '@root') and not ModuleVisible(AOwner) then
+      Fail('Module is not visible; add it to uses');
     Exit(FFunctions.TryGetValue(SymbolKey(AOwner, AName), AFunction));
   end;
-  if FLocalFunctions.TryGetValue(LowerCase(AName), AFunction) then Exit(True);
-  if FFunctions.TryGetValue(SymbolKey(CurrentOwner, AName), AFunction) then Exit(True);
-  Count := 0; Seen := False;
+  if FLocalFunctions.TryGetValue(LowerCase(AName), AFunction) then
+    Exit(True);
+  if FFunctions.TryGetValue(SymbolKey(CurrentOwner, AName), AFunction) then
+    Exit(True);
+  Count := 0;
+  Seen := False;
   for Key in ExportKeys(AName) do
     if FFunctions.TryGetValue(Key, Candidate) then
     begin
       Seen := True;
-      if ModuleVisible(Candidate.ModuleName) then begin AFunction := Candidate; Inc(Count); end;
+      if ModuleVisible(Candidate.ModuleName) then
+      begin
+        AFunction := Candidate;
+        Inc(Count);
+      end;
     end;
-  if Count > 1 then Fail('Ambiguous function name; use Module.Function');
-  if (Count = 0) and Seen and AReportScope then Fail('Function belongs to another module; add it to uses');
+  if Count > 1 then
+    Fail('Ambiguous function name; use Module.Function');
+  if (Count = 0) and Seen and AReportScope then
+    Fail('Function belongs to another module; add it to uses');
   Result := Count = 1;
 end;
 
 function TParser.FindConstant(const AName, AOwner: string; out AExpression: TExpression; AReportScope: Boolean): Boolean;
-var Key: string; Candidate: TExpression; Count: Integer; Seen: Boolean;
+var
+  Key: string;
+  Candidate: TExpression;
+  Count: Integer;
+  Seen: Boolean;
 begin
   if AOwner <> '' then
   begin
-    if (AOwner <> '@root') and not ModuleVisible(AOwner) then Fail('Module is not visible; add it to uses');
+    if (AOwner <> '@root') and not ModuleVisible(AOwner) then
+      Fail('Module is not visible; add it to uses');
     Exit(FConstants.TryGetValue(SymbolKey(AOwner, AName), AExpression));
   end;
-  if FLocalConstants.TryGetValue(LowerCase(AName), AExpression) then Exit(True);
-  if FConstants.TryGetValue(SymbolKey(CurrentOwner, AName), AExpression) then Exit(True);
-  Count := 0; Seen := False;
+  if FLocalConstants.TryGetValue(LowerCase(AName), AExpression) then
+    Exit(True);
+  if FConstants.TryGetValue(SymbolKey(CurrentOwner, AName), AExpression) then
+    Exit(True);
+  Count := 0;
+  Seen := False;
   for Key in ExportKeys(AName) do
     if FConstants.TryGetValue(Key, Candidate) then
     begin
       Seen := True;
-      if ModuleVisible(FConstantOwners[Key]) then begin AExpression := Candidate; Inc(Count); end;
+      if ModuleVisible(FConstantOwners[Key]) then
+      begin
+        AExpression := Candidate;
+        Inc(Count);
+      end;
     end;
-  if Count > 1 then Fail('Ambiguous constant name; use Module.Constant');
-  if (Count = 0) and Seen and AReportScope then Fail('Constant belongs to another module; add it to uses');
+  if Count > 1 then
+    Fail('Ambiguous constant name; use Module.Constant');
+  if (Count = 0) and Seen and AReportScope then
+    Fail('Constant belongs to another module; add it to uses');
   Result := Count = 1;
 end;
 
@@ -430,9 +488,13 @@ function TParser.ModuleVisible(const AName: string): Boolean;
 var
   Name: string;
 begin
-  if FActiveLibrary = nil then Exit(True);
-  if SameText(AName, FActiveLibrary.ModuleName) then Exit(True);
-  for Name in FActiveLibrary.VisibleModules do if SameText(Name, AName) then Exit(True);
+  if FActiveLibrary = nil then
+    Exit(True);
+  if SameText(AName, FActiveLibrary.ModuleName) then
+    Exit(True);
+  for Name in FActiveLibrary.VisibleModules do
+    if SameText(Name, AName) then
+      Exit(True);
   Result := False;
 end;
 
@@ -456,8 +518,13 @@ end;
 
 procedure TParser.Next;
 begin
-  if FHasLookahead then begin FToken := FLookahead; FHasLookahead := False; end
-  else FToken := FLexer.Next;
+  if FHasLookahead then
+  begin
+    FToken := FLookahead;
+    FHasLookahead := False;
+  end
+  else
+    FToken := FLexer.Next;
   if FToken.Kind = tkInclude then
     Fail('Includes require file compilation; use TShaderCompiler.CompileFile');
 end;
@@ -524,7 +591,9 @@ begin
       (IsSignedInteger(V.DataType) and (SignedValue(V.Bits, V.DataType) < 0)) then
       Fail('Expected a nonnegative 32-bit integer constant expression');
     Result := V.Bits;
-  finally E.Free; end;
+  finally
+    E.Free;
+  end;
 end;
 
 function TParser.ReadType(out AComposite: TCompositeType): TShaderType;
@@ -542,7 +611,8 @@ var
 begin
   Inc(FTypeDepth);
   try
-    if FTypeDepth > 32 then Fail('Composite type nesting exceeds 32 levels');
+    if FTypeDepth > 32 then
+      Fail('Composite type nesting exceeds 32 levels');
     AComposite := nil;
     Owner := ReadOwnerPrefix(True);
     if (Owner = '') and (FToken.Kind = tkIdentifier) and TryShaderType(FToken.Text, Result) then
@@ -560,14 +630,17 @@ begin
       Next;
       Exit;
     end;
-    if Owner <> '' then Fail('Unknown exported type in module ' + Owner);
+    if Owner <> '' then
+      Fail('Unknown exported type in module ' + Owner);
     if IsWord('set') then
     begin
       // set of TEnum: a 32-bit mask, bit N = ordinal N (Delphi set layout from 0).
       Next;
       ExpectWord('of');
-      if ReadType(AComposite) <> stEnum then Fail('Sets require an enumeration element type: set of TEnum');
-      if EnumHigh(AComposite) > 31 then Fail('Set elements must have ordinal values 0..31');
+      if ReadType(AComposite) <> stEnum then
+        Fail('Sets require an enumeration element type: set of TEnum');
+      if EnumHigh(AComposite) > 31 then
+        Fail('Set elements must have ordinal values 0..31');
       Exit(stSet);
     end;
     if FToken.Kind = tkLeftParen then
@@ -601,8 +674,10 @@ begin
           AComposite.Fields.Add(Field);
           Field.Name := Name.Text;
           Field.Position := Name.Position;
-          if AComposite.Fields.Count > 1024 then Fail('Records are limited to 1024 fields');
-          if FToken.Kind <> tkComma then Break;
+          if AComposite.Fields.Count > 1024 then
+            Fail('Records are limited to 1024 fields');
+          if FToken.Kind <> tkComma then
+            Break;
           Next;
         until False;
         Expect(tkColon, '":"');
@@ -614,7 +689,8 @@ begin
         end;
         Expect(tkSemicolon, '";"');
       end;
-      if AComposite.Fields.Count = 0 then Fail('Records must not be empty');
+      if AComposite.Fields.Count = 0 then
+        Fail('Records must not be empty');
       Next;
     end
     else
@@ -625,13 +701,16 @@ begin
       // array[0..A, 0..B] of T is array[0..A] of array[0..B] of T, as in Delphi.
       Lengths := nil;
       repeat
-        if ReadUInt <> 0 then Fail('Static arrays must have a zero lower bound');
+        if ReadUInt <> 0 then
+          Fail('Static arrays must have a zero lower bound');
         Expect(tkDot, '".."');
         Expect(tkDot, '".."');
         Upper := ReadUInt;
-        if Upper >= MaxStaticArrayLength then Fail('Static arrays are limited to 65536 elements');
+        if Upper >= MaxStaticArrayLength then
+          Fail('Static arrays are limited to 65536 elements');
         Lengths := Lengths + [Upper + 1];
-        if FToken.Kind <> tkComma then Break;
+        if FToken.Kind <> tkComma then
+          Break;
         Next;
       until False;
       Expect(tkRightBracket, '"]"');
@@ -656,7 +735,8 @@ begin
       for I := High(Lengths) downto 1 do
       begin
         Dimension := AComposite;
-        for var J := 1 to I do Dimension := Dimension.ElementComposite;
+        for var J := 1 to I do
+          Dimension := Dimension.ElementComposite;
         CalculateLayout(Dimension);
       end;
     end;
@@ -677,10 +757,12 @@ begin
     (FToken.Kind in [tkEOF, tkLeftBracket]) then
     Fail('Expected at least one type declaration');
   while not IsWord('var') and not IsWord('const') and not IsWord('type') and not IsWord('function') and
-    not IsWord('procedure') and (FToken.Kind <> tkLeftBracket) and (FToken.Kind <> tkEOF) do
+      not IsWord('procedure') and (FToken.Kind <> tkLeftBracket) and (FToken.Kind <> tkEOF) do
   begin
-    if FNamedTypes.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) then Fail('Duplicate type name');
-    if FFunctions.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) or FConstants.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) then Fail('Duplicate identifier for type name');
+    if FNamedTypes.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) then
+      Fail('Duplicate type name');
+    if FFunctions.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) or FConstants.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) then
+      Fail('Duplicate identifier for type name');
     Name := ReadName(True);
     Expect(tkEqual, '"="');
     FDefiningType := Name.Text;
@@ -692,12 +774,16 @@ begin
     end
     else
       Reference.DataType := ReadType(Reference.Composite);
-    if FActiveLibrary <> nil then Reference.ModuleName := FActiveLibrary.ModuleName
-    else Reference.ModuleName := '';
+    if FActiveLibrary <> nil then
+      Reference.ModuleName := FActiveLibrary.ModuleName
+    else
+      Reference.ModuleName := '';
     FDefiningType := '';
     if (Reference.Composite <> nil) and (Reference.Composite.ID >= FirstID) then
-      if FActiveLibrary <> nil then Reference.Composite.Name := FActiveLibrary.ModuleName + '.' + Name.Text
-      else Reference.Composite.Name := Name.Text;
+      if FActiveLibrary <> nil then
+        Reference.Composite.Name := FActiveLibrary.ModuleName + '.' + Name.Text
+      else
+        Reference.Composite.Name := Name.Text;
     FNamedTypes.Add(SymbolKey(CurrentOwner, Name.Text), Reference);
     RegisterExport(SymbolKey(CurrentOwner, Name.Text), Name.Text);
     Expect(tkSemicolon, '";"');
@@ -722,7 +808,10 @@ begin
   Result.Position := FToken.Position;
   Result.Kind := ctEnum;
   FModule.Types.Add(Result);
-  if FActiveLibrary = nil then Owner := '' else Owner := FActiveLibrary.ModuleName;
+  if FActiveLibrary = nil then
+    Owner := ''
+  else
+    Owner := FActiveLibrary.ModuleName;
   Expect(tkLeftParen, '"("');
   Value := 0;
   repeat
@@ -739,12 +828,16 @@ begin
         if not EvaluateConstant(E, V) or not IsScalarIntegerType(V.DataType) then
           raise EShaderError.Create(E.Position, 'Expected an integer constant enumeration value');
         Value := SignedValue(V.Bits, V.DataType);
-        if (V.DataType = stUInt64) and (V.Bits > UInt64(High(Int64))) then Value := -1;
-      finally E.Free; end;
+        if (V.DataType = stUInt64) and (V.Bits > UInt64(High(Int64))) then
+          Value := -1;
+      finally
+        E.Free;
+      end;
     end;
     if (Value < 0) or (Value > High(Integer)) then
       raise EShaderError.Create(Enumerator.Position, 'Enumeration values must be in 0..2147483647');
-    if Result.Fields.Count >= 65536 then Fail('Enumerations are limited to 65536 values');
+    if Result.Fields.Count >= 65536 then
+      Fail('Enumerations are limited to 65536 values');
     Field := TTypeField.Create;
     Field.Name := Enumerator.Text;
     Field.Position := Enumerator.Position;
@@ -759,7 +852,8 @@ begin
     RegisterExport(Key, Enumerator.Text);
     FConstantOwners.Add(Key, Owner);
     Inc(Value);
-    if FToken.Kind <> tkComma then Break;
+    if FToken.Kind <> tkComma then
+      Break;
     Next;
   until False;
   Expect(tkRightParen, '")" after the enumeration values');
@@ -772,9 +866,10 @@ procedure TParser.ParseConstants;
 begin
   ExpectWord('const');
   if IsWord('type') or IsWord('var') or IsWord('function') or IsWord('procedure') or
-    (FToken.Kind in [tkEOF, tkLeftBracket]) then Fail('Expected at least one constant declaration');
+    (FToken.Kind in [tkEOF, tkLeftBracket]) then
+    Fail('Expected at least one constant declaration');
   while not IsWord('type') and not IsWord('var') and not IsWord('function') and not IsWord('procedure') and
-    (FToken.Kind <> tkEOF) and (FToken.Kind <> tkLeftBracket) do
+      (FToken.Kind <> tkEOF) and (FToken.Kind <> tkLeftBracket) do
     ParseConstantDeclaration(False);
 end;
 
@@ -806,7 +901,10 @@ var
     end;
     FConstants.Add(Key, AExpression);
     RegisterExport(Key, Name.Text);
-    if FActiveLibrary = nil then Owner := '' else Owner := FActiveLibrary.ModuleName;
+    if FActiveLibrary = nil then
+      Owner := ''
+    else
+      Owner := FActiveLibrary.ModuleName;
     FConstantOwners.Add(Key, Owner);
   end;
 
@@ -831,7 +929,8 @@ begin
   DataType := stVoid;
   if Typed then
   begin
-    Next; DataType := ReadType(Composite);
+    Next;
+    DataType := ReadType(Composite);
   end;
   Expect(tkEqual, '"="');
   // Arrays, records and vectors: a read-only constant table (Private storage).
@@ -839,15 +938,23 @@ begin
   begin
     E := ParseConstantInitializer(DataType, Composite);
     Table := TShaderVariable.Create;
-    Table.Name := Name.Text; Table.Position := Name.Position;
-    Table.Kind := vkConstant; Table.DataType := DataType; Table.Composite := Composite;
+    Table.Name := Name.Text;
+    Table.Position := Name.Position;
+    Table.Kind := vkConstant;
+    Table.DataType := DataType;
+    Table.Composite := Composite;
     Table.Access := baReadOnly;
     FModule.Constants.Add(Table, E);
     FModule.ConstantOrder.Add(Table);
-    E := TExpression.Create; E.Kind := ekLocal;
-    E.DataType := DataType; E.Composite := Composite; E.Variable := Table; E.Position := Name.Position;
+    E := TExpression.Create;
+    E.Kind := ekLocal;
+    E.DataType := DataType;
+    E.Composite := Composite;
+    E.Variable := Table;
+    E.Position := Name.Position;
     Register(E);
-    if not AStatement then Expect(tkSemicolon, '";"');
+    if not AStatement then
+      Expect(tkSemicolon, '";"');
     Exit;
   end;
   E := ParseExpression;
@@ -860,32 +967,42 @@ begin
     InitializerAdaptable := IsScalarIntegerType(V.DataType) and TreeAdaptable(E) and ExactNarrowConstant(E);
     if Typed and IsScalarIntegerType(V.DataType) and TreeAdaptable(E) and not InitializerAdaptable and
       (V.DataType <> DataType) and IsScalarIntegerType(DataType) then
-      raise EShaderError.Create(Name.Position, Format(
-        'Untyped constant expression wraps in %s before conversion to %s; use a typed operand',
-        [ShaderTypeName(V.DataType), ShaderTypeName(DataType)]));
+      raise EShaderError.Create(Name.Position, Format('Untyped constant expression wraps in %s before conversion to %s; use a typed operand', [ShaderTypeName(V.DataType), ShaderTypeName(DataType)]));
     Adaptable := not Typed and InitializerAdaptable;
     // Enumerations and sets keep their type identity.
     ValueComposite := E.Composite;
     if Typed then
     begin
-      FreeAndNil(E); E := TExpression.Create;
-      E.Kind := ekConstant; E.Position := Name.Position; E.DataType := V.DataType; E.Bits := V.Bits;
+      FreeAndNil(E);
+      E := TExpression.Create;
+      E.Kind := ekConstant;
+      E.Position := Name.Position;
+      E.DataType := V.DataType;
+      E.Bits := V.Bits;
       E.Composite := ValueComposite;
       E.Adaptable := InitializerAdaptable;
       Convert(E, DataType, False, Composite);
-      if not EvaluateConstant(E, V) then Fail('Invalid typed constant conversion');
+      if not EvaluateConstant(E, V) then
+        Fail('Invalid typed constant conversion');
       ValueComposite := Composite;
     end;
     FreeAndNil(E);
     E := TExpression.Create;
-    E.Kind := ekConstant; E.Position := Name.Position; E.DataType := V.DataType; E.Bits := V.Bits;
+    E.Kind := ekConstant;
+    E.Position := Name.Position;
+    E.DataType := V.DataType;
+    E.Bits := V.Bits;
     E.Composite := ValueComposite;
     E.Adaptable := Adaptable;
     Register(E);
     E := nil;
-    if not AStatement then Expect(tkSemicolon, '";"');
-  finally E.Free; end;
+    if not AStatement then
+      Expect(tkSemicolon, '";"');
+  finally
+    E.Free;
+  end;
 end;
+
 function TParser.ParseConstantInitializer(AType: TShaderType; AComposite: TCompositeType): TExpression;
 var
   I: Cardinal;
@@ -900,15 +1017,25 @@ begin
     Result := ParseExpression;
     try
       Convert(Result, AType, False, AComposite);
-      if not EvaluateConstant(Result, V) then Fail('Expected a defined constant element');
-      FreeAndNil(Result); Result := TExpression.Create;
-      Result.Kind := ekConstant; Result.DataType := V.DataType; Result.Composite := AComposite;
+      if not EvaluateConstant(Result, V) then
+        Fail('Expected a defined constant element');
+      FreeAndNil(Result);
+      Result := TExpression.Create;
+      Result.Kind := ekConstant;
+      Result.DataType := V.DataType;
+      Result.Composite := AComposite;
       Result.Bits := V.Bits;
       Exit;
-    except Result.Free; raise; end;
+    except
+      Result.Free;
+      raise;
+    end;
   end;
-  Result := TExpression.Create; Result.Kind := ekConstantArray;
-  Result.Position := FToken.Position; Result.DataType := AType; Result.Composite := AComposite;
+  Result := TExpression.Create;
+  Result.Kind := ekConstantArray;
+  Result.Position := FToken.Position;
+  Result.DataType := AType;
+  Result.Composite := AComposite;
   try
     if (AType <> stComposite) and (FToken.Kind <> tkLeftParen) then
     begin
@@ -920,8 +1047,10 @@ begin
           raise EShaderError.Create(Value.Position, 'Expected a constant vector: (X, Y, ...) or a constructor of constants');
         for I := 0 to Count - 1 do
         begin
-          if Value.Arguments.Count = 1 then Element := Value.Arguments[0]
-          else Element := Value.Arguments[I];
+          if Value.Arguments.Count = 1 then
+            Element := Value.Arguments[0]
+          else
+            Element := Value.Arguments[I];
           if not EvaluateConstant(Element, V) then
             raise EShaderError.Create(Element.Position, 'Expected a defined constant element');
           Result.Arguments.Add(MakeConstant(V.DataType, V.Bits, False, Element.Position));
@@ -937,7 +1066,8 @@ begin
       for I := 0 to Count - 1 do
       begin
         Result.Arguments.Add(ParseConstantInitializer(ComponentType(AType), nil));
-        if Integer(I) + 1 < Count then Expect(tkComma, '"," between vector components');
+        if Integer(I) + 1 < Count then
+          Expect(tkComma, '"," between vector components');
       end;
       Expect(tkRightParen, '")" after the vector components');
     end
@@ -953,23 +1083,30 @@ begin
         Next;
         Expect(tkColon, '":"');
         Result.Arguments.Add(ParseConstantInitializer(Field.DataType, Field.Composite));
-        if Integer(I) + 1 < AComposite.Fields.Count then Expect(tkSemicolon, '";" between record fields')
-        else if FToken.Kind = tkSemicolon then Next;
+        if Integer(I) + 1 < AComposite.Fields.Count then
+          Expect(tkSemicolon, '";" between record fields')
+        else if FToken.Kind = tkSemicolon then
+          Next;
       end;
       Expect(tkRightParen, '")" after the record fields');
     end
     else
     begin
-      if AComposite.Length > 65532 then Fail('A constant array dimension is limited to 65532 elements');
+      if AComposite.Length > 65532 then
+        Fail('A constant array dimension is limited to 65532 elements');
       Expect(tkLeftParen, '"(" for a constant array initializer');
       for I := 0 to AComposite.Length - 1 do
       begin
         Result.Arguments.Add(ParseConstantInitializer(AComposite.ElementType, AComposite.ElementComposite));
-        if I + 1 < AComposite.Length then Expect(tkComma, '"," between constant array elements');
+        if I + 1 < AComposite.Length then
+          Expect(tkComma, '"," between constant array elements');
       end;
       Expect(tkRightParen, '")" after the exact number of array elements');
     end;
-  except Result.Free; raise; end;
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 function TParser.ReadAttributes: TAttributes;
@@ -1019,7 +1156,8 @@ begin
       end
       else if Name = 'shared' then
       begin
-        if Result.HasShared then Fail('Duplicate Shared attribute');
+        if Result.HasShared then
+          Fail('Duplicate Shared attribute');
         Result.HasShared := True;
       end
       else if Name = 'localsize' then
@@ -1051,19 +1189,22 @@ begin
       end
       else if Name = 'vulkan12' then
       begin
-        if Result.HasVulkan12 then Fail('Duplicate Vulkan12 attribute');
+        if Result.HasVulkan12 then
+          Fail('Duplicate Vulkan12 attribute');
         if Result.HasVulkan11 then
           Fail('Vulkan11 and Vulkan12 cannot be combined');
         Result.HasVulkan12 := True;
       end
       else if Name = 'strictfloat' then
       begin
-        if Result.HasStrictFloat then Fail('Duplicate StrictFloat attribute');
+        if Result.HasStrictFloat then
+          Fail('Duplicate StrictFloat attribute');
         Result.HasStrictFloat := True;
       end
       else if Name = 'aliased' then
       begin
-        if Result.HasAliased then Fail('Duplicate Aliased attribute');
+        if Result.HasAliased then
+          Fail('Duplicate Aliased attribute');
         Result.HasAliased := True;
       end
       else if (Name = 'compute') or (Name = 'vertex') or (Name = 'fragment') then
@@ -1167,8 +1308,7 @@ begin
   if (FCurrentFunction <> nil) and (AVariable.Kind = vkParameter) and SameText(AVariable.Name, FCurrentFunction.Name) or
     FSymbols.ContainsKey(Key) or FLocalSymbols.ContainsKey(Key) or
     FindFunction(AVariable.Name, '', ShaderFunction, False) or FindConstant(AVariable.Name, '', ConstantExpression, False) then
-    raise EShaderError.Create(AVariable.Position,
-      Format('Duplicate identifier "%s"; shadowing is not supported', [AVariable.Name]));
+    raise EShaderError.Create(AVariable.Position, Format('Duplicate identifier "%s"; shadowing is not supported', [AVariable.Name]));
   if AVariable.Kind in [vkLocal, vkParameter, vkResult] then
     FLocalSymbols.Add(Key, AVariable)
   else
@@ -1238,8 +1378,8 @@ begin
     for Other in FModule.Resources do
       if (Other <> Variable) and (Other.Kind = Variable.Kind) and
         (((Variable.GraphicsBuiltin <> gbNone) and (Variable.GraphicsBuiltin = Other.GraphicsBuiltin)) or
-         ((Variable.GraphicsBuiltin = gbNone) and (Other.GraphicsBuiltin = gbNone) and
-           (Variable.Location = Other.Location) and (Variable.SourceIndex = Other.SourceIndex))) then
+        ((Variable.GraphicsBuiltin = gbNone) and (Other.GraphicsBuiltin = gbNone) and
+        (Variable.Location = Other.Location) and (Variable.SourceIndex = Other.SourceIndex))) then
         Fail('Duplicate stage interface location or built-in');
     Expect(tkSemicolon, '";"');
     Exit;
@@ -1261,7 +1401,8 @@ begin
   begin
     if AAttributes.HasShared then
     begin
-      if AAttributes.HasBinding or AAttributes.HasAccess then Fail('Shared variables cannot have bindings or access attributes');
+      if AAttributes.HasBinding or AAttributes.HasAccess then
+        Fail('Shared variables cannot have bindings or access attributes');
       Variable.Kind := vkShared;
       Variable.Access := baReadWrite;
       Variable.DataType := ReadType(Variable.Composite);
@@ -1269,11 +1410,13 @@ begin
         not (Variable.Composite.ElementType in [stInteger, stCardinal, stSingle]) then
         Fail('Shared memory requires a static one-dimensional array of Integer, Cardinal or Single');
       Inc(FModule.SharedBytes, Variable.Composite.Size);
-      if FModule.SharedBytes > 16384 then Fail('Shared memory exceeds the portable 16 KiB compiler limit');
+      if FModule.SharedBytes > 16384 then
+        Fail('Shared memory exceeds the portable 16 KiB compiler limit');
     end
     else if TryImageType(FToken.Text, Variable.ImageFormat) then
     begin
-      Variable.Kind := vkImage; Variable.DataType := ImagePixelType(Variable.ImageFormat);
+      Variable.Kind := vkImage;
+      Variable.DataType := ImagePixelType(Variable.ImageFormat);
       Variable.Access := AAttributes.Access;
       Next;
     end
@@ -1284,48 +1427,56 @@ begin
       Variable.CombinedSampler := not IsWord('Texture2D');
       if IsWord('CombinedTexture2DUInt') then
         Variable.DataType := stCardinal4;
-      if AAttributes.HasAccess and (AAttributes.Access <> baReadOnly) then Fail('Texture2D is read-only');
-      Variable.Access := baReadOnly; Next;
+      if AAttributes.HasAccess and (AAttributes.Access <> baReadOnly) then
+        Fail('Texture2D is read-only');
+      Variable.Access := baReadOnly;
+      Next;
     end
     else if IsWord('Sampler') then
     begin
       Variable.Kind := vkSampler;
-      if AAttributes.HasAccess then Fail('Sampler cannot have buffer access attributes');
+      if AAttributes.HasAccess then
+        Fail('Sampler cannot have buffer access attributes');
       Next;
     end
     else
     begin
-    if not AAttributes.HasBinding then
-      Fail('Storage buffers require [Binding(descriptorSet, binding)]');
-    Variable.DescriptorSet := AAttributes.DescriptorSet;
-    Variable.Binding := AAttributes.Binding;
-    Variable.Access := AAttributes.Access;
-    ExpectWord('array');
-    ExpectWord('of');
-    Variable.DataType := ReadType(Variable.Composite);
-    if Variable.DataType = stBoolean then
-      Fail('Boolean is not supported in GPU resource layouts; use Cardinal');
-    for Other in FModule.Resources do
-      if (Other <> Variable) and (Other.Kind = vkBuffer) and
-        (Other.DescriptorSet = Variable.DescriptorSet) and
-        (Other.Binding = Variable.Binding) then
-        Fail('Duplicate descriptor set and binding');
+      if not AAttributes.HasBinding then
+        Fail('Storage buffers require [Binding(descriptorSet, binding)]');
+      Variable.DescriptorSet := AAttributes.DescriptorSet;
+      Variable.Binding := AAttributes.Binding;
+      Variable.Access := AAttributes.Access;
+      ExpectWord('array');
+      ExpectWord('of');
+      Variable.DataType := ReadType(Variable.Composite);
+      if Variable.DataType = stBoolean then
+        Fail('Boolean is not supported in GPU resource layouts; use Cardinal');
+      for Other in FModule.Resources do
+        if (Other <> Variable) and (Other.Kind = vkBuffer) and
+          (Other.DescriptorSet = Variable.DescriptorSet) and
+          (Other.Binding = Variable.Binding) then
+          Fail('Duplicate descriptor set and binding');
     end;
   end;
-  if AAttributes.HasShared and AAttributes.HasPushConstant then Fail('Shared and PushConstant conflict');
+  if AAttributes.HasShared and AAttributes.HasPushConstant then
+    Fail('Shared and PushConstant conflict');
   if Variable.Kind in [vkBuffer, vkImage, vkTexture, vkSampler] then
   begin
-    if not AAttributes.HasBinding then Fail('GPU descriptors require Binding(set, binding)');
-    Variable.DescriptorSet := AAttributes.DescriptorSet; Variable.Binding := AAttributes.Binding;
+    if not AAttributes.HasBinding then
+      Fail('GPU descriptors require Binding(set, binding)');
+    Variable.DescriptorSet := AAttributes.DescriptorSet;
+    Variable.Binding := AAttributes.Binding;
     for Other in FModule.Resources do
-      if (Other <> Variable) and (Other.Kind in [vkBuffer,vkImage,vkTexture,vkSampler]) and
+      if (Other <> Variable) and (Other.Kind in [vkBuffer, vkImage, vkTexture, vkSampler]) and
         (Other.DescriptorSet = Variable.DescriptorSet) and (Other.Binding = Variable.Binding) then
         Fail('Duplicate descriptor set and binding');
   end;
-  if Variable.Kind in [vkBuffer, vkPushConstant] then RequireExternalLayout(Variable.DataType, Variable.Composite);
+  if Variable.Kind in [vkBuffer, vkPushConstant] then
+    RequireExternalLayout(Variable.DataType, Variable.Composite);
   if AAttributes.HasAliased then
   begin
-    if Variable.Kind <> vkBuffer then Fail('Aliased is only valid on storage buffers');
+    if Variable.Kind <> vkBuffer then
+      Fail('Aliased is only valid on storage buffers');
     Variable.Aliased := True;
   end;
   if AAttributes.HasCoherent then
@@ -1352,10 +1503,14 @@ begin
     if FToken.Kind <> tkRightParen then
       repeat
         Mode := pmValue;
-        if IsWord('var') then Mode := pmVar
-        else if IsWord('out') then Mode := pmOut
-        else if IsWord('const') then Mode := pmConst;
-        if Mode <> pmValue then Next;
+        if IsWord('var') then
+          Mode := pmVar
+        else if IsWord('out') then
+          Mode := pmOut
+        else if IsWord('const') then
+          Mode := pmConst;
+        if Mode <> pmValue then
+          Next;
         Group.Clear;
         repeat
           Name := ReadName;
@@ -1395,23 +1550,29 @@ begin
 end;
 
 function SameParameterTypes(A, B: TShaderFunction): Boolean;
-var I: Integer;
+var
+  I: Integer;
 begin
-  if A.Parameters.Count <> B.Parameters.Count then Exit(False);
+  if A.Parameters.Count <> B.Parameters.Count then
+    Exit(False);
   for I := 0 to A.Parameters.Count - 1 do
     if (A.Parameters[I].DataType <> B.Parameters[I].DataType) or
-      (A.Parameters[I].Composite <> B.Parameters[I].Composite) then Exit(False);
+      (A.Parameters[I].Composite <> B.Parameters[I].Composite) then
+      Exit(False);
   Result := True;
 end;
 
 function SameHeading(A, B: TShaderFunction): Boolean;
-var I: Integer;
+var
+  I: Integer;
 begin
   if not SameParameterTypes(A, B) or (A.ReturnType <> B.ReturnType) or
-    (A.ReturnComposite <> B.ReturnComposite) then Exit(False);
+    (A.ReturnComposite <> B.ReturnComposite) then
+    Exit(False);
   for I := 0 to A.Parameters.Count - 1 do
     if (A.Parameters[I].ParameterMode <> B.Parameters[I].ParameterMode) or
-      not SameText(A.Parameters[I].Name, B.Parameters[I].Name) then Exit(False);
+      not SameText(A.Parameters[I].Name, B.Parameters[I].Name) then
+      Exit(False);
   Result := True;
 end;
 
@@ -1419,7 +1580,8 @@ function InOverloadChain(AHead, AFunction: TShaderFunction): Boolean;
 begin
   while AHead <> nil do
   begin
-    if AHead = AFunction then Exit(True);
+    if AHead = AFunction then
+      Exit(True);
     AHead := AHead.NextOverload;
   end;
   Result := False;
@@ -1470,7 +1632,10 @@ begin
   begin
     if AAttributes.HasAny then
       Fail('Attributes are not supported on helper functions');
-    if IsProcedure then ExpectWord('procedure') else ExpectWord('function');
+    if IsProcedure then
+      ExpectWord('procedure')
+    else
+      ExpectWord('function');
     Name := ReadName(True);
   end;
   LowerName := LowerCase(Name.Text);
@@ -1495,7 +1660,9 @@ begin
       raise EShaderError.Create(Name.Position, Format('Duplicate identifier "%s"', [Name.Text]));
   end;
   SavedFunction := FCurrentFunction;
-  SavedSymbols := nil; SavedConstants := nil; SavedFunctions := nil;
+  SavedSymbols := nil;
+  SavedConstants := nil;
+  SavedFunctions := nil;
   if ANested then
   begin
     I := 1;
@@ -1517,9 +1684,11 @@ begin
   ShaderFunction := TShaderFunction.Create;
   Registered := False;
   ShaderFunction.Name := Name.Text;
-  if FActiveLibrary <> nil then ShaderFunction.ModuleName := FActiveLibrary.ModuleName;
+  if FActiveLibrary <> nil then
+    ShaderFunction.ModuleName := FActiveLibrary.ModuleName;
   ShaderFunction.Position := Name.Position;
-  if ANested then ShaderFunction.Outer := SavedFunction;
+  if ANested then
+    ShaderFunction.Outer := SavedFunction;
   FCurrentFunction := ShaderFunction;
   if not ANested then
   begin
@@ -1558,7 +1727,8 @@ begin
           FLocalSymbols.Remove('result');
           AddSymbol(Variable);
         end
-        else ShaderFunction.ReturnType := stVoid;
+        else
+          ShaderFunction.ReturnType := stVoid;
       end;
       Expect(tkSemicolon, '";"');
       IsForwardDecl := False;
@@ -1567,12 +1737,14 @@ begin
       begin
         if IsWord('forward') then
         begin
-          if IsForwardDecl then Fail('Duplicate forward directive');
+          if IsForwardDecl then
+            Fail('Duplicate forward directive');
           IsForwardDecl := True;
         end
         else
         begin
-          if IsOverloadDecl then Fail('Duplicate overload directive');
+          if IsOverloadDecl then
+            Fail('Duplicate overload directive');
           IsOverloadDecl := True;
         end;
         Next;
@@ -1608,8 +1780,7 @@ begin
       begin
         if Existing.IsForward and not IsForwardDecl then
           raise EShaderError.Create(Name.Position, Format('Declaration of "%s" differs from its forward declaration', [Name.Text]));
-        raise EShaderError.Create(Name.Position, Format(
-          'Duplicate identifier "%s"; mark every version with overload', [Name.Text]));
+        raise EShaderError.Create(Name.Position, Format('Duplicate identifier "%s"; mark every version with overload', [Name.Text]));
       end;
       if Target <> nil then
       begin
@@ -1621,12 +1792,17 @@ begin
         if ANested then
         begin
           FLocalSymbols.Clear;
-          for Pair in SavedSymbols do FLocalSymbols.Add(Pair.Key, Pair.Value);
-          if Target.ResultVariable <> nil then FLocalSymbols.Remove('result');
+          for Pair in SavedSymbols do
+            FLocalSymbols.Add(Pair.Key, Pair.Value);
+          if Target.ResultVariable <> nil then
+            FLocalSymbols.Remove('result');
         end
-        else FLocalSymbols.Clear;
-        for Variable in Target.Parameters do AddSymbol(Variable);
-        if Target.ResultVariable <> nil then AddSymbol(Target.ResultVariable);
+        else
+          FLocalSymbols.Clear;
+        for Variable in Target.Parameters do
+          AddSymbol(Variable);
+        if Target.ResultVariable <> nil then
+          AddSymbol(Target.ResultVariable);
       end
       else
       begin
@@ -1635,7 +1811,8 @@ begin
         Registered := True;
         ShaderFunction.IsForward := IsForwardDecl;
         ShaderFunction.IsOverload := IsOverloadDecl;
-        if Last <> nil then Last.NextOverload := ShaderFunction
+        if Last <> nil then
+          Last.NextOverload := ShaderFunction
         else if ANested then
         begin
           FLocalFunctions.AddOrSetValue(LowerName, ShaderFunction);
@@ -1646,9 +1823,11 @@ begin
           FFunctions.Add(Key, ShaderFunction);
           RegisterExport(Key, Name.Text);
         end;
-        if AEntryPoint then FModule.EntryPoint := ShaderFunction;
+        if AEntryPoint then
+          FModule.EntryPoint := ShaderFunction;
       end;
-      if IsForwardDecl then Exit;
+      if IsForwardDecl then
+        Exit;
       while IsWord('var') or IsWord('const') or IsWord('function') or IsWord('procedure') do
         ParseLocals;
       ShaderFunction.Body := ParseBlock;
@@ -1665,11 +1844,14 @@ begin
     if ANested then
     begin
       FLocalSymbols.Clear;
-      for Pair in SavedSymbols do FLocalSymbols.Add(Pair.Key, Pair.Value);
+      for Pair in SavedSymbols do
+        FLocalSymbols.Add(Pair.Key, Pair.Value);
       FLocalConstants.Clear;
-      for var C in SavedConstants do FLocalConstants.Add(C.Key, C.Value);
+      for var C in SavedConstants do
+        FLocalConstants.Add(C.Key, C.Value);
       FLocalFunctions.Clear;
-      for var F in SavedFunctions do FLocalFunctions.Add(F.Key, F.Value);
+      for var F in SavedFunctions do
+        FLocalFunctions.Add(F.Key, F.Value);
       SavedSymbols.Free;
       SavedConstants.Free;
       SavedFunctions.Free;
@@ -1682,11 +1864,11 @@ begin
     end;
   end;
 end;
+
 function TParser.DeclareLocal(const AName: TToken; AType: TShaderType; AComposite: TCompositeType): TShaderVariable;
 begin
   if FCurrentFunction.Locals.Count + FCurrentFunction.Parameters.Count >= MaxFunctionVariables then
-    raise EShaderError.Create(AName.Position,
-      Format('A function is limited to %d parameters and local variables', [MaxFunctionVariables]));
+    raise EShaderError.Create(AName.Position, Format('A function is limited to %d parameters and local variables', [MaxFunctionVariables]));
   Result := TShaderVariable.Create;
   FCurrentFunction.Locals.Add(Result);
   Result.Name := AName.Text;
@@ -1727,7 +1909,8 @@ begin
         Next;
         if SectionEnd then
           Fail('Expected at least one local constant declaration');
-        repeat ParseConstantDeclaration(True);
+        repeat
+          ParseConstantDeclaration(True);
         until SectionEnd;
         Continue;
       end;
@@ -1741,15 +1924,16 @@ begin
           Name := ReadName;
           for var Other in Names do
             if SameText(Other.Text, Name.Text) then
-              raise EShaderError.Create(Name.Position,
-                Format('Duplicate identifier "%s"; shadowing is not supported', [Name.Text]));
+              raise EShaderError.Create(Name.Position, Format('Duplicate identifier "%s"; shadowing is not supported', [Name.Text]));
           Names.Add(Name);
-          if FToken.Kind <> tkComma then Break;
+          if FToken.Kind <> tkComma then
+            Break;
           Next;
         until False;
         Expect(tkColon, '":"');
         DataType := ReadType(Composite);
-        for Name in Names do DeclareLocal(Name, DataType, Composite);
+        for Name in Names do
+          DeclareLocal(Name, DataType, Composite);
         Expect(tkSemicolon, '";"');
       end;
     end;
@@ -1757,6 +1941,7 @@ begin
     Names.Free;
   end;
 end;
+
 procedure TParser.PushScope;
 begin
   FScopes.Add(TList<string>.Create);
@@ -1776,7 +1961,8 @@ end;
 
 procedure TParser.DeclareInScope(const ALowerName: string);
 begin
-  if FScopes.Count > 0 then FScopes.Last.Add(ALowerName);
+  if FScopes.Count > 0 then
+    FScopes.Last.Add(ALowerName);
 end;
 
 // Inline declaration in a statement list: "var X: T;", "var X: T := E;",
@@ -1849,6 +2035,7 @@ begin
     raise;
   end;
 end;
+
 procedure TParser.EnterDepth;
 begin
   Inc(FDepth);
@@ -1930,8 +2117,10 @@ begin
       Exit(ParseFor);
     if IsWord('var') or IsWord('const') then
       Exit(ParseInlineVar);
-    if IsWord('case') then Exit(ParseCase);
-    if IsWord('repeat') then Exit(ParseRepeat);
+    if IsWord('case') then
+      Exit(ParseCase);
+    if IsWord('repeat') then
+      Exit(ParseRepeat);
     Result := TStatement.Create;
     Result.Position := FToken.Position;
     try
@@ -1941,15 +2130,20 @@ begin
         // the address of the variable is evaluated once.
         Result.Kind := skIncrement;
         Result.Descending := IsWord('Dec');
-        if IsWord('Inc') then Result.Operation := opAdd
-        else if IsWord('Dec') then Result.Operation := opSubtract
-        else if IsWord('Include') then Result.Operation := opOr
-        else Result.Operation := opAnd;
+        if IsWord('Inc') then
+          Result.Operation := opAdd
+        else if IsWord('Dec') then
+          Result.Operation := opSubtract
+        else if IsWord('Include') then
+          Result.Operation := opOr
+        else
+          Result.Operation := opAnd;
         Next;
         Expect(tkLeftParen, '"("');
         Result.Target := ParseReference(True);
         Base := Result.Target;
-        while Base.Kind in [ekField, ekIndex, ekComponent] do Base := Base.Left;
+        while Base.Kind in [ekField, ekIndex, ekComponent] do
+          Base := Base.Left;
         if (Base.Kind = ekBufferElement) and (Base.Variable.Access = baWriteOnly) then
           raise EShaderError.Create(Result.Target.Position, 'Inc/Dec/Include/Exclude read the variable: cannot use a WriteOnly buffer');
         if (Base.Kind = ekLocal) and (Base.Variable.Kind = vkOutput) then
@@ -1960,15 +2154,24 @@ begin
             raise EShaderError.Create(Result.Target.Position, 'Include/Exclude require a set variable');
           Expect(tkComma, '","');
           Element := ParseExpression;
-          try Convert(Element, stEnum, False, Result.Target.Composite); except Element.Free; raise; end;
+          try
+            Convert(Element, stEnum, False, Result.Target.Composite);
+          except
+            Element.Free;
+            raise;
+          end;
           // Value = [E] (Include) or not [E] (Exclude), combined with or/and.
           Result.Value := SetBit(Element, Result.Target.Composite);
           if Result.Operation = opAnd then
           begin
             Element := TExpression.Create;
-            Element.Kind := ekUnary; Element.Operation := opNot; Element.Position := Result.Value.Position;
-            Element.DataType := stSet; Element.Composite := Result.Target.Composite;
-            Element.Left := Result.Value; Element.Depth := Result.Value.Depth + 1;
+            Element.Kind := ekUnary;
+            Element.Operation := opNot;
+            Element.Position := Result.Value.Position;
+            Element.DataType := stSet;
+            Element.Composite := Result.Target.Composite;
+            Element.Left := Result.Value;
+            Element.Depth := Result.Value.Depth + 1;
             Result.Value := Element;
           end;
         end
@@ -1983,8 +2186,10 @@ begin
           end
           else
             Result.Value := MakeConstant(stInteger, 1, True, Result.Target.Position);
-          if Result.Target.DataType = stEnum then Convert(Result.Value, stCardinal)
-          else Convert(Result.Value, Result.Target.DataType);
+          if Result.Target.DataType = stEnum then
+            Convert(Result.Value, stCardinal)
+          else
+            Convert(Result.Value, Result.Target.DataType);
         end;
         Expect(tkRightParen, '")"');
       end
@@ -2015,7 +2220,8 @@ begin
           Next;
           if FToken.Kind <> tkRightParen then
           begin
-            if FCurrentFunction.ReturnType = stVoid then Fail('Procedures cannot return a value');
+            if FCurrentFunction.ReturnType = stVoid then
+              Fail('Procedures cannot return a value');
             Result.Value := ParseExpression;
             Convert(Result.Value, FCurrentFunction.ReturnType, False, FCurrentFunction.ReturnComposite);
           end;
@@ -2024,32 +2230,47 @@ begin
       end
       else if IsWord('Break') or IsWord('Continue') then
       begin
-        if FLoopDepth = 0 then Fail('Break/Continue require an enclosing loop');
-        if IsWord('Break') then Result.Kind := skBreak else Result.Kind := skContinue;
+        if FLoopDepth = 0 then
+          Fail('Break/Continue require an enclosing loop');
+        if IsWord('Break') then
+          Result.Kind := skBreak
+        else
+          Result.Kind := skContinue;
         Next;
       end
       else if IsWord('AtomicAdd') or IsWord('AtomicExchange') or IsWord('AtomicCompareExchange') or
         IsWord('AtomicAnd') or IsWord('AtomicOr') then
       begin
-        Result.Kind := skEvaluate; Result.Value := ParseAtomic;
+        Result.Kind := skEvaluate;
+        Result.Value := ParseAtomic;
       end
       else if IsWord('ImageStore') then
       begin
-        Result.Kind := skEvaluate; Result.Value := ParseImageOperation;
+        Result.Kind := skEvaluate;
+        Result.Value := ParseImageOperation;
       end
       else if IsWord('Barrier') or IsWord('BufferMemoryBarrier') or IsWord('ImageMemoryBarrier') then
       begin
-        if (FCurrentFunction = nil) or (FCurrentFunction <> FModule.EntryPoint) then Fail('Barriers are only available in Main');
+        if (FCurrentFunction = nil) or (FCurrentFunction <> FModule.EntryPoint) then
+          Fail('Barriers are only available in Main');
         Result.Kind := skBarrier;
         if IsWord('Barrier') then
         begin
-          if FControlDepth <> 0 then Fail('Barrier must be unconditional, outside if/while/for');
-          Result.BarrierKind := bkWorkgroup; FModule.UsesWorkgroupBarrier := True;
+          if FControlDepth <> 0 then
+            Fail('Barrier must be unconditional, outside if/while/for');
+          Result.BarrierKind := bkWorkgroup;
+          FModule.UsesWorkgroupBarrier := True;
         end
-        else if IsWord('BufferMemoryBarrier') then Result.BarrierKind := bkBuffer
-        else Result.BarrierKind := bkImage;
+        else if IsWord('BufferMemoryBarrier') then
+          Result.BarrierKind := bkBuffer
+        else
+          Result.BarrierKind := bkImage;
         Next;
-        if FToken.Kind = tkLeftParen then begin Next; Expect(tkRightParen, '")"'); end;
+        if FToken.Kind = tkLeftParen then
+        begin
+          Next;
+          Expect(tkRightParen, '")"');
+        end;
       end
       else if IsWord('if') then
       begin
@@ -2082,7 +2303,11 @@ begin
         ExpectWord('do');
         BeforeState := Snapshot;
         Inc(FLoopDepth);
-        try Result.Body := ParseControlledStatement; finally Dec(FLoopDepth); end;
+        try
+          Result.Body := ParseControlledStatement;
+        finally
+          Dec(FLoopDepth);
+        end;
         ElseState := Snapshot;
         for I := 0 to FCurrentFunction.Locals.Count - 1 do
           FCurrentFunction.Locals[I].Initialized := StateAt(BeforeState, I) and StateAt(ElseState, I);
@@ -2120,7 +2345,12 @@ function TParser.ParseControlledStatement: TStatement;
 begin
   Inc(FControlDepth);
   PushScope; // an inline declaration as a lone branch/body ends with it
-  try Result := ParseStatement; finally PopScope; Dec(FControlDepth); end;
+  try
+    Result := ParseStatement;
+  finally
+    PopScope;
+    Dec(FControlDepth);
+  end;
 end;
 
 function TParser.ParseFor: TStatement;
@@ -2174,12 +2404,10 @@ begin
       Result.Target := ParseReference(True);
       if (Result.Target.Kind <> ekLocal) or (Result.Target.Variable.Kind <> vkLocal) or
         not IsOrdinalType(Result.Target.DataType) then
-        raise EShaderError.Create(Result.Target.Position,
-          'A for-loop counter must be a local Integer or Cardinal variable (or another integer or enumeration type)');
+        raise EShaderError.Create(Result.Target.Position, 'A for-loop counter must be a local Integer or Cardinal variable (or another integer or enumeration type)');
       Counter := Result.Target.Variable;
       if Counter.Captured then
-        raise EShaderError.Create(Result.Target.Position,
-          'A for-loop counter cannot be a variable shared with a nested routine');
+        raise EShaderError.Create(Result.Target.Position, 'A for-loop counter cannot be a variable shared with a nested routine');
       Expect(tkAssign, '":="');
       Result.Value := ParseExpression;
     end;
@@ -2199,7 +2427,11 @@ begin
     Counter.ActiveFor := True;
     try
       Inc(FLoopDepth);
-      try Result.Body := ParseControlledStatement; finally Dec(FLoopDepth); end;
+      try
+        Result.Body := ParseControlledStatement;
+      finally
+        Dec(FLoopDepth);
+      end;
       BodyState := Snapshot;
     finally
       Counter.ActiveFor := False;
@@ -2214,7 +2446,8 @@ begin
       PopScope;
     end;
   except
-    if Scoped then PopScope;
+    if Scoped then
+      PopScope;
     Result.Free;
     raise;
   end;
@@ -2223,23 +2456,41 @@ end;
 function TParser.ParseRepeat: TStatement;
 begin
   Result := TStatement.Create;
-  Result.Kind := skRepeat; Result.Position := FToken.Position;
-  Result.Body := TStatement.Create; Result.Body.Kind := skBlock;
+  Result.Kind := skRepeat;
+  Result.Position := FToken.Position;
+  Result.Body := TStatement.Create;
+  Result.Body.Kind := skBlock;
   try
-    Next; Inc(FLoopDepth); Inc(FControlDepth);
+    Next;
+    Inc(FLoopDepth);
+    Inc(FControlDepth);
     // Inline declarations of the body are not visible in the until condition.
     PushScope;
     try
       while not IsWord('until') do
       begin
-        if FToken.Kind = tkSemicolon then begin Next; Continue; end;
+        if FToken.Kind = tkSemicolon then
+        begin
+          Next;
+          Continue;
+        end;
         Result.Body.Children.Add(ParseStatement);
-        if not IsWord('until') then Expect(tkSemicolon, '";"');
+        if not IsWord('until') then
+          Expect(tkSemicolon, '";"');
       end;
-    finally PopScope; Dec(FLoopDepth); Dec(FControlDepth); end;
-    Next; Result.Condition := ParseExpression;
-    if Result.Condition.DataType <> stBoolean then Fail('Until condition must be Boolean');
-  except Result.Free; raise; end;
+    finally
+      PopScope;
+      Dec(FLoopDepth);
+      Dec(FControlDepth);
+    end;
+    Next;
+    Result.Condition := ParseExpression;
+    if Result.Condition.DataType <> stBoolean then
+      Fail('Until condition must be Boolean');
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 function TParser.ParseCase: TStatement;
@@ -2251,14 +2502,18 @@ var
   Arms: TList<TArray<UInt64>>;
   Seen: TDictionary<UInt64, Boolean>;
 begin
-  Result := TStatement.Create; Result.Kind := skCase; Result.Position := FToken.Position;
+  Result := TStatement.Create;
+  Result.Kind := skCase;
+  Result.Position := FToken.Position;
   Seen := TDictionary<UInt64, Boolean>.Create;
   Labels := TList<UInt64>.Create;
   Arms := TList<TArray<UInt64>>.Create;
   try
     try
-      Next; Result.Condition := ParseExpression;
-      if not IsOrdinalType(Result.Condition.DataType) then Fail('Case selector must be a scalar integer or enumeration');
+      Next;
+      Result.Condition := ParseExpression;
+      if not IsOrdinalType(Result.Condition.DataType) then
+        Fail('Case selector must be a scalar integer or enumeration');
       ExpectWord('of');
       while not IsWord('end') and not IsWord('else') do
       begin
@@ -2267,61 +2522,94 @@ begin
           E := ParseExpression;
           try
             Convert(E, Result.Condition.DataType, False, Result.Condition.Composite);
-            if not EvaluateConstant(E, V) then Fail('Case labels must be defined integer constants');
+            if not EvaluateConstant(E, V) then
+              Fail('Case labels must be defined integer constants');
             RangeEnd := V;
             if (FToken.Kind = tkDot) and (PeekToken.Kind = tkDot) then
             begin
               // Range label Low..High: expanded into individual OpSwitch literals.
-              Next; Next;
+              Next;
+              Next;
               FreeAndNil(E);
               E := ParseExpression;
               Convert(E, Result.Condition.DataType, False, Result.Condition.Composite);
-              if not EvaluateConstant(E, RangeEnd) then Fail('Case labels must be defined integer constants');
+              if not EvaluateConstant(E, RangeEnd) then
+                Fail('Case labels must be defined integer constants');
               if (IsSignedInteger(V.DataType) and (SignedValue(V.Bits, V.DataType) > SignedValue(RangeEnd.Bits, V.DataType))) or
                 (not IsSignedInteger(V.DataType) and (V.Bits > RangeEnd.Bits)) then
                 Fail('Case range low bound exceeds high bound');
             end;
             repeat
-              if Seen.ContainsKey(V.Bits) then Fail('Duplicate case label');
-              if Seen.Count >= MaxSwitchLabels then Fail('Case labels exceed the SPIR-V switch budget (16383 pairs)');
-              Seen.Add(V.Bits, True); Labels.Add(V.Bits);
-              if V.Bits = RangeEnd.Bits then Break;
+              if Seen.ContainsKey(V.Bits) then
+                Fail('Duplicate case label');
+              if Seen.Count >= MaxSwitchLabels then
+                Fail('Case labels exceed the SPIR-V switch budget (16383 pairs)');
+              Seen.Add(V.Bits, True);
+              Labels.Add(V.Bits);
+              if V.Bits = RangeEnd.Bits then
+                Break;
               V.Bits := (V.Bits + 1) and IntegerMask(V.DataType);
             until False;
-          finally E.Free; end;
-          if FToken.Kind <> tkComma then Break;
+          finally
+            E.Free;
+          end;
+          if FToken.Kind <> tkComma then
+            Break;
           Next;
         until False;
         Expect(tkColon, '":"');
         Inc(FControlDepth);
         PushScope;
-        try Result.Children.Add(ParseStatement); finally PopScope; Dec(FControlDepth); end;
+        try
+          Result.Children.Add(ParseStatement);
+        finally
+          PopScope;
+          Dec(FControlDepth);
+        end;
         Arms.Add(Labels.ToArray);
-        if FToken.Kind = tkSemicolon then Next
-        else if not IsWord('end') and not IsWord('else') then Fail('Expected semicolon between case arms');
+        if FToken.Kind = tkSemicolon then
+          Next
+        else if not IsWord('end') and not IsWord('else') then
+          Fail('Expected semicolon between case arms');
       end;
       if IsWord('else') then
       begin
-        Next; Result.ElsePart := TStatement.Create; Result.ElsePart.Kind := skBlock;
+        Next;
+        Result.ElsePart := TStatement.Create;
+        Result.ElsePart.Kind := skBlock;
         Inc(FControlDepth);
         PushScope;
         try
           while not IsWord('end') do
           begin
-            if FToken.Kind = tkSemicolon then begin Next; Continue; end;
+            if FToken.Kind = tkSemicolon then
+            begin
+              Next;
+              Continue;
+            end;
             Result.ElsePart.Children.Add(ParseStatement);
-            if not IsWord('end') then Expect(tkSemicolon, '";"');
+            if not IsWord('end') then
+              Expect(tkSemicolon, '";"');
           end;
-        finally PopScope; Dec(FControlDepth); end;
+        finally
+          PopScope;
+          Dec(FControlDepth);
+        end;
       end;
       ExpectWord('end');
       Result.CaseLabels := Arms.ToArray;
-    except Result.Free; raise; end;
-  finally Arms.Free; Labels.Free; Seen.Free; end;
+    except
+      Result.Free;
+      raise;
+    end;
+  finally
+    Arms.Free;
+    Labels.Free;
+    Seen.Free;
+  end;
 end;
 
-procedure TParser.Convert(var AExpression: TExpression; AType: TShaderType;
-  AExplicit: Boolean; AComposite: TCompositeType);
+procedure TParser.Convert(var AExpression: TExpression; AType: TShaderType; AExplicit: Boolean; AComposite: TCompositeType);
 var
   Node: TExpression;
   Allowed: Boolean;
@@ -2330,9 +2618,9 @@ var
 begin
   if (AType = stComposite) or (AExpression.DataType = stComposite) then
   begin
-    if (AType = AExpression.DataType) and (AExpression.Composite = AComposite) then Exit;
-    raise EShaderError.Create(AExpression.Position, Format('Cannot convert %s to %s',
-      [TypeReferenceName(AExpression.DataType, AExpression.Composite), TypeReferenceName(AType, AComposite)]));
+    if (AType = AExpression.DataType) and (AExpression.Composite = AComposite) then
+      Exit;
+    raise EShaderError.Create(AExpression.Position, Format('Cannot convert %s to %s', [TypeReferenceName(AExpression.DataType, AExpression.Composite), TypeReferenceName(AType, AComposite)]));
   end;
   // An if expression converts branch by branch, so untyped literals still adapt.
   if (AExpression.Kind = ekConditional) and not AExplicit and
@@ -2346,7 +2634,8 @@ begin
   end;
   if (AType in [stEnum, stSet]) or (AExpression.DataType in [stEnum, stSet]) then
   begin
-    if (AType = AExpression.DataType) and (AExpression.Composite = AComposite) then Exit;
+    if (AType = AExpression.DataType) and (AExpression.Composite = AComposite) then
+      Exit;
     // [] is compatible with every set type.
     if (AType = stSet) and (AExpression.DataType = stSet) and (AExpression.Composite = nil) and
       (AExpression.Kind = ekConstant) then
@@ -2358,10 +2647,9 @@ begin
     // (TMode(I), Integer(M), TModes(Mask), Cardinal(S)); nothing else converts.
     if not AExplicit or
       not ((IsScalarIntegerType(AExpression.DataType) and (AType in [stEnum, stSet])) or
-        ((AExpression.DataType in [stEnum, stSet]) and IsScalarIntegerType(AType)) or
-        ((AExpression.DataType = AType) and (AType in [stEnum, stSet]))) then
-      raise EShaderError.Create(AExpression.Position, Format('Cannot convert %s to %s',
-        [TypeReferenceName(AExpression.DataType, AExpression.Composite), TypeReferenceName(AType, AComposite)]));
+      ((AExpression.DataType in [stEnum, stSet]) and IsScalarIntegerType(AType)) or
+      ((AExpression.DataType = AType) and (AType in [stEnum, stSet]))) then
+      raise EShaderError.Create(AExpression.Position, Format('Cannot convert %s to %s', [TypeReferenceName(AExpression.DataType, AExpression.Composite), TypeReferenceName(AType, AComposite)]));
     if AExpression.Kind = ekConstant then
     begin
       AExpression.Bits := IntegerCastBits(AExpression.Bits, AExpression.DataType, AType);
@@ -2396,24 +2684,27 @@ begin
     TreeAdaptable(AExpression) and EvaluateConstant(AExpression, V) then
   begin
     if not ExactNarrowConstant(AExpression) then
-      raise EShaderError.Create(AExpression.Position, Format(
-        'Untyped constant expression wraps in %s before conversion to %s; ' +
-        'use a typed operand, for example %s(...)',
-        [ShaderTypeName(AExpression.DataType), ShaderTypeName(AType), ShaderTypeName(AType)]));
+      raise EShaderError.Create(AExpression.Position, Format('Untyped constant expression wraps in %s before conversion to %s; ' + 'use a typed operand, for example %s(...)', [ShaderTypeName(AExpression.DataType), ShaderTypeName(AType), ShaderTypeName(AType)]));
     Negative := IsSignedInteger(V.DataType) and (SignedValue(V.Bits, V.DataType) < 0);
     if Negative then
       Fits := IsSignedInteger(AType) and
         (SignedValue(V.Bits, V.DataType) >= SignedValue(UInt64(1) shl (ScalarBitWidth(AType) - 1), AType))
-    else if IsSignedInteger(AType) then Fits := V.Bits <= (UInt64(1) shl (ScalarBitWidth(AType) - 1)) - 1
-    else Fits := V.Bits <= IntegerMask(AType);
+    else if IsSignedInteger(AType) then
+      Fits := V.Bits <= (UInt64(1) shl (ScalarBitWidth(AType) - 1)) - 1
+    else
+      Fits := V.Bits <= IntegerMask(AType);
     if Fits then
     begin
       Node := TExpression.Create;
-      Node.Kind := ekConstant; Node.Position := AExpression.Position; Node.DataType := AType;
+      Node.Kind := ekConstant;
+      Node.Position := AExpression.Position;
+      Node.DataType := AType;
       Node.Bits := IntegerCastBits(V.Bits, V.DataType, AType);
       // Still an untyped literal value: it may adapt again (guarded by exactness).
       Node.Adaptable := True;
-      AExpression.Free; AExpression := Node; Exit;
+      AExpression.Free;
+      AExpression := Node;
+      Exit;
     end;
   end;
   Allowed := IsNumericType(AExpression.DataType) and IsNumericType(AType) and
@@ -2433,9 +2724,7 @@ begin
     end;
   end;
   if not Allowed then
-    raise EShaderError.Create(AExpression.Position,
-      Format('Cannot convert %s to %s; use an explicit numeric cast where valid',
-      [ShaderTypeName(AExpression.DataType), ShaderTypeName(AType)]));
+    raise EShaderError.Create(AExpression.Position, Format('Cannot convert %s to %s; use an explicit numeric cast where valid', [ShaderTypeName(AExpression.DataType), ShaderTypeName(AType)]));
   if AExpression.Depth >= 128 then
     raise EShaderError.Create(AExpression.Position, 'Expression nesting limit exceeded');
   Node := TExpression.Create;
@@ -2502,9 +2791,13 @@ begin
     TreeAdaptable(ALeft) and TreeAdaptable(ARight) and
     (ScalarBitWidth(ALeft.DataType) <> ScalarBitWidth(ARight.DataType)) then
   begin
-    if ScalarBitWidth(ALeft.DataType) > ScalarBitWidth(ARight.DataType) then Wider := ALeft.DataType
-    else Wider := ARight.DataType;
-    Convert(ALeft, Wider); Convert(ARight, Wider); Exit;
+    if ScalarBitWidth(ALeft.DataType) > ScalarBitWidth(ARight.DataType) then
+      Wider := ALeft.DataType
+    else
+      Wider := ARight.DataType;
+    Convert(ALeft, Wider);
+    Convert(ARight, Wider);
+    Exit;
   end;
   if IsFloatType(ALeft.DataType) or IsFloatType(ARight.DataType) then
   begin
@@ -2514,13 +2807,14 @@ begin
         raise EShaderError.Create(ALeft.Position, 'Double currently supports scalar operations only');
       FloatType := stDouble;
     end
-    else FloatType := VectorType(stSingle, ComponentCount(ALeft.DataType));
+    else
+      FloatType := VectorType(stSingle, ComponentCount(ALeft.DataType));
     Convert(ALeft, FloatType);
     Convert(ARight, FloatType);
   end
   else if (ALeft.Kind = ekConstant) and ALeft.Adaptable and
     (not ((ARight.Kind = ekConstant) and ARight.Adaptable) or
-      (ALeft.Bits <= (UInt64(1) shl (ScalarBitWidth(ALeft.DataType) - 1)) - 1)) then
+    (ALeft.Bits <= (UInt64(1) shl (ScalarBitWidth(ALeft.DataType) - 1)) - 1)) then
     Convert(ALeft, ARight.DataType)
   else
     Convert(ARight, ALeft.DataType);
@@ -2528,20 +2822,19 @@ end;
 
 // Enumerations: comparisons only. Sets: + (union), * (intersection), - (difference),
 // = <>, <= (subset), >= (superset); [] adapts to the other operand.
-procedure TParser.MakeOrdinalBinary(AResult: TExpression; AOperation: TOperator;
-  const APosition: TSourcePosition);
+procedure TParser.MakeOrdinalBinary(AResult: TExpression; AOperation: TOperator; const APosition: TSourcePosition);
 var
   L, R, Inner, Negated, Swap: TExpression;
 begin
   if (AResult.Left.DataType = stSet) and (AResult.Right.DataType = stSet) then
   begin
-    if AResult.Left.Composite = nil then Convert(AResult.Left, stSet, False, AResult.Right.Composite)
-    else if AResult.Right.Composite = nil then Convert(AResult.Right, stSet, False, AResult.Left.Composite);
+    if AResult.Left.Composite = nil then
+      Convert(AResult.Left, stSet, False, AResult.Right.Composite)
+    else if AResult.Right.Composite = nil then
+      Convert(AResult.Right, stSet, False, AResult.Left.Composite);
   end;
   if (AResult.Left.DataType <> AResult.Right.DataType) or (AResult.Left.Composite <> AResult.Right.Composite) then
-    raise EShaderError.Create(APosition, Format('Incompatible types: %s and %s',
-      [TypeReferenceName(AResult.Left.DataType, AResult.Left.Composite),
-       TypeReferenceName(AResult.Right.DataType, AResult.Right.Composite)]));
+    raise EShaderError.Create(APosition, Format('Incompatible types: %s and %s', [TypeReferenceName(AResult.Left.DataType, AResult.Left.Composite), TypeReferenceName(AResult.Right.DataType, AResult.Right.Composite)]));
   if AResult.Left.DataType = stEnum then
   begin
     if not (AOperation in [opEqual, opNotEqual, opLess, opLessEqual, opGreater, opGreaterEqual]) then
@@ -2551,29 +2844,58 @@ begin
   end;
   AResult.Composite := AResult.Left.Composite;
   case AOperation of
-    opAdd: begin AResult.Operation := opOr; AResult.DataType := stSet; end;
-    opMultiply: begin AResult.Operation := opAnd; AResult.DataType := stSet; end;
-    opEqual, opNotEqual: begin AResult.DataType := stBoolean; AResult.Composite := nil; end;
+    opAdd:
+      begin
+        AResult.Operation := opOr;
+        AResult.DataType := stSet;
+      end;
+    opMultiply:
+      begin
+        AResult.Operation := opAnd;
+        AResult.DataType := stSet;
+      end;
+    opEqual, opNotEqual:
+      begin
+        AResult.DataType := stBoolean;
+        AResult.Composite := nil;
+      end;
     opSubtract, opLessEqual, opGreaterEqual:
       begin
         // A - B = A and not B; A <= B is (A - B) = []; A >= B is (B - A) = [].
-        L := AResult.Left; R := AResult.Right;
-        AResult.Left := nil; AResult.Right := nil;
-        if AOperation = opGreaterEqual then begin Swap := L; L := R; R := Swap; end;
+        L := AResult.Left;
+        R := AResult.Right;
+        AResult.Left := nil;
+        AResult.Right := nil;
+        if AOperation = opGreaterEqual then
+        begin
+          Swap := L;
+          L := R;
+          R := Swap;
+        end;
         Negated := TExpression.Create;
-        Negated.Kind := ekUnary; Negated.Operation := opNot; Negated.Position := APosition;
-        Negated.DataType := stSet; Negated.Composite := R.Composite; Negated.Left := R;
+        Negated.Kind := ekUnary;
+        Negated.Operation := opNot;
+        Negated.Position := APosition;
+        Negated.DataType := stSet;
+        Negated.Composite := R.Composite;
+        Negated.Left := R;
         Negated.Depth := R.Depth + 1;
         if AOperation = opSubtract then
         begin
-          AResult.Operation := opAnd; AResult.DataType := stSet;
-          AResult.Left := L; AResult.Right := Negated;
+          AResult.Operation := opAnd;
+          AResult.DataType := stSet;
+          AResult.Left := L;
+          AResult.Right := Negated;
           Exit;
         end;
         Inner := TExpression.Create;
-        Inner.Kind := ekBinary; Inner.Operation := opAnd; Inner.Position := APosition;
-        Inner.DataType := stSet; Inner.Composite := L.Composite;
-        Inner.Left := L; Inner.Right := Negated;
+        Inner.Kind := ekBinary;
+        Inner.Operation := opAnd;
+        Inner.Position := APosition;
+        Inner.DataType := stSet;
+        Inner.Composite := L.Composite;
+        Inner.Left := L;
+        Inner.Right := Negated;
         Inner.Depth := Max(L.Depth, Negated.Depth) + 1;
         AResult.Left := Inner;
         AResult.Right := MakeConstant(stSet, 0, False, APosition);
@@ -2587,8 +2909,7 @@ begin
   end;
 end;
 
-function TParser.MakeBinary(AOperation: TOperator; ALeft, ARight: TExpression;
-  const APosition: TSourcePosition): TExpression;
+function TParser.MakeBinary(AOperation: TOperator; ALeft, ARight: TExpression; const APosition: TSourcePosition): TExpression;
 begin
   Result := TExpression.Create;
   Result.Kind := ekBinary;
@@ -2607,14 +2928,14 @@ begin
     end;
     case AOperation of
       opShiftLeft, opShiftRight:
-      begin
-        if not IsIntegerType(ALeft.DataType) or not IsIntegerType(ARight.DataType) then
-          raise EShaderError.Create(APosition, 'Shift operands must be integers');
-        if ComponentCount(Result.Right.DataType) = 1 then
-          Splat(Result.Right, ComponentCount(Result.Left.DataType));
-        if ComponentCount(Result.Left.DataType) <> ComponentCount(Result.Right.DataType) then
-          raise EShaderError.Create(APosition, 'Shift operands must have matching vector widths');
-      end;
+        begin
+          if not IsIntegerType(ALeft.DataType) or not IsIntegerType(ARight.DataType) then
+            raise EShaderError.Create(APosition, 'Shift operands must be integers');
+          if ComponentCount(Result.Right.DataType) = 1 then
+            Splat(Result.Right, ComponentCount(Result.Left.DataType));
+          if ComponentCount(Result.Left.DataType) <> ComponentCount(Result.Right.DataType) then
+            raise EShaderError.Create(APosition, 'Shift operands must have matching vector widths');
+        end;
       opAnd, opOr, opXor:
         if not ((ALeft.DataType = stBoolean) and (ARight.DataType = stBoolean)) then
         begin
@@ -2693,15 +3014,24 @@ begin
       Next;
       if FToken.Kind <> tkRightBracket then
         repeat
-          if Result.Arguments.Count >= MaxSwitchLabels then Fail('Too many set constructor items');
+          if Result.Arguments.Count >= MaxSwitchLabels then
+            Fail('Too many set constructor items');
           Item := ParseExpression;
-          try Convert(Item, ALeft.DataType, False, ALeft.Composite); except Item.Free; raise; end;
+          try
+            Convert(Item, ALeft.DataType, False, ALeft.Composite);
+          except
+            Item.Free;
+            raise;
+          end;
           if (FToken.Kind = tkDot) and (PeekToken.Kind = tkDot) then
           begin
-            Next; Next;
+            Next;
+            Next;
             Range := TExpression.Create;
-            Range.Kind := ekRange; Range.Position := Item.Position;
-            Range.DataType := Item.DataType; Range.Composite := Item.Composite;
+            Range.Kind := ekRange;
+            Range.Position := Item.Position;
+            Range.DataType := Item.DataType;
+            Range.Composite := Item.Composite;
             Range.Left := Item;
             Result.Arguments.Add(Range);
             Range.Right := ParseExpression;
@@ -2709,10 +3039,13 @@ begin
             Range.Depth := Max(Range.Left.Depth, Range.Right.Depth) + 1;
             Item := Range;
           end
-          else Result.Arguments.Add(Item);
+          else
+            Result.Arguments.Add(Item);
           Result.Depth := Max(Result.Depth, Item.Depth + 1);
-          if Result.Depth > 128 then Fail('Expression nesting limit exceeded');
-          if FToken.Kind <> tkComma then Break;
+          if Result.Depth > 128 then
+            Fail('Expression nesting limit exceeded');
+          if FToken.Kind <> tkComma then
+            Break;
           Next;
         until False;
       Expect(tkRightBracket, '"]"');
@@ -2761,19 +3094,23 @@ begin
         Item := ParseExpression;
         try
           if Item.DataType <> stEnum then
-            raise EShaderError.Create(Item.Position,
-              'Set constructors need enumeration elements (integer lists are supported with in)');
+            raise EShaderError.Create(Item.Position, 'Set constructors need enumeration elements (integer lists are supported with in)');
           if Composite = nil then
           begin
             Composite := Item.Composite;
             if EnumHigh(Composite) > 31 then
               raise EShaderError.Create(Item.Position, 'Set elements must have ordinal values 0..31');
           end
-          else Convert(Item, stEnum, False, Composite);
-        except Item.Free; raise; end;
+          else
+            Convert(Item, stEnum, False, Composite);
+        except
+          Item.Free;
+          raise;
+        end;
         if (FToken.Kind = tkDot) and (PeekToken.Kind = tkDot) then
         begin
-          Next; Next;
+          Next;
+          Next;
           LowerItem := Item;
           UpperItem := nil;
           try
@@ -2781,28 +3118,41 @@ begin
             Convert(UpperItem, stEnum, False, Composite);
             Convert(LowerItem, stCardinal, True);
             Convert(UpperItem, stCardinal, True);
-          except LowerItem.Free; UpperItem.Free; raise; end;
+          except
+            LowerItem.Free;
+            UpperItem.Free;
+            raise;
+          end;
           // Bits Lo..Hi: (not 0 shl Lo) and (not 0 shr (31 - Hi)); empty when Lo > Hi.
           Ones := MakeConstant(stCardinal, $FFFFFFFF, False, Position);
           Part := MakeBinary(opShiftLeft, Ones, LowerItem, Position);
           try
             UpperItem := MakeBinary(opSubtract, MakeConstant(stCardinal, 31, False, Position), UpperItem, Position);
-          except Part.Free; raise; end;
+          except
+            Part.Free;
+            raise;
+          end;
           try
             UpperItem := MakeBinary(opShiftRight, MakeConstant(stCardinal, $FFFFFFFF, False, Position), UpperItem, Position);
-          except Part.Free; raise; end;
+          except
+            Part.Free;
+            raise;
+          end;
           Part := MakeBinary(opAnd, Part, UpperItem, Position);
           Convert(Part, stSet, True, Composite);
         end
-        else Part := SetBit(Item, Composite);
-        if Result = nil then Result := Part
+        else
+          Part := SetBit(Item, Composite);
+        if Result = nil then
+          Result := Part
         else
         begin
           Ones := Result;
           Result := nil;
           Result := MakeBinary(opAdd, Ones, Part, Position);
         end;
-        if FToken.Kind <> tkComma then Break;
+        if FToken.Kind <> tkComma then
+          Break;
         Next;
       until False;
     Expect(tkRightBracket, '"]"');
@@ -2840,18 +3190,19 @@ begin
     if (Result.Left.DataType = stVoid) or (Result.Right.DataType = stVoid) then
       raise EShaderError.Create(Position, 'Both branches of an if expression need a value');
     if (Result.Left.DataType = Result.Right.DataType) and (Result.Left.Composite = Result.Right.Composite) then
+
     else if IsNumericType(Result.Left.DataType) and IsNumericType(Result.Right.DataType) then
       UnifyNumeric(Result.Left, Result.Right)
     else if (Result.Left.DataType = stSet) and (Result.Right.DataType = stSet) then
     begin
       // [] adapts to the other set type.
-      if Result.Left.Composite = nil then Convert(Result.Left, stSet, False, Result.Right.Composite)
-      else Convert(Result.Right, stSet, False, Result.Left.Composite);
+      if Result.Left.Composite = nil then
+        Convert(Result.Left, stSet, False, Result.Right.Composite)
+      else
+        Convert(Result.Right, stSet, False, Result.Left.Composite);
     end
     else
-      raise EShaderError.Create(Position, Format('Incompatible types in if expression: %s and %s',
-        [TypeReferenceName(Result.Left.DataType, Result.Left.Composite),
-         TypeReferenceName(Result.Right.DataType, Result.Right.Composite)]));
+      raise EShaderError.Create(Position, Format('Incompatible types in if expression: %s and %s', [TypeReferenceName(Result.Left.DataType, Result.Left.Composite), TypeReferenceName(Result.Right.DataType, Result.Right.Composite)]));
     Result.DataType := Result.Left.DataType;
     Result.Composite := Result.Left.Composite;
     // Pure scalar/vector branches may use OpSelect; otherwise branch + OpPhi.
@@ -2875,7 +3226,8 @@ var
   Right: TExpression;
   Negated: Boolean;
 begin
-  if IsWord('if') then Exit(ParseConditional);
+  if IsWord('if') then
+    Exit(ParseConditional);
   Result := ParseAdditive;
   try
     // X in S, and Delphi 13 X not in S (relational precedence).
@@ -2883,7 +3235,8 @@ begin
     begin
       Negated := IsWord('not');
       Position := FToken.Position;
-      if Negated then Next;
+      if Negated then
+        Next;
       Next;
       Right := Result;
       Result := nil;
@@ -2892,19 +3245,29 @@ begin
       begin
         Right := Result;
         Result := TExpression.Create;
-        Result.Kind := ekUnary; Result.Operation := opNot; Result.Position := Position;
-        Result.DataType := stBoolean; Result.Left := Right; Result.Depth := Right.Depth + 1;
+        Result.Kind := ekUnary;
+        Result.Operation := opNot;
+        Result.Position := Position;
+        Result.DataType := stBoolean;
+        Result.Left := Right;
+        Result.Depth := Right.Depth + 1;
       end;
       Exit;
     end;
     Operation := opNone;
     case FToken.Kind of
-      tkEqual: Operation := opEqual;
-      tkNotEqual: Operation := opNotEqual;
-      tkLess: Operation := opLess;
-      tkLessEqual: Operation := opLessEqual;
-      tkGreater: Operation := opGreater;
-      tkGreaterEqual: Operation := opGreaterEqual;
+      tkEqual:
+        Operation := opEqual;
+      tkNotEqual:
+        Operation := opNotEqual;
+      tkLess:
+        Operation := opLess;
+      tkLessEqual:
+        Operation := opLessEqual;
+      tkGreater:
+        Operation := opGreater;
+      tkGreaterEqual:
+        Operation := opGreaterEqual;
     end;
     if Operation <> opNone then
     begin
@@ -2934,11 +3297,16 @@ begin
     while True do
     begin
       Operation := opNone;
-      if FToken.Kind = tkPlus then Operation := opAdd
-      else if FToken.Kind = tkMinus then Operation := opSubtract
-      else if IsWord('or') then Operation := opOr
-      else if IsWord('xor') then Operation := opXor;
-      if Operation = opNone then Break;
+      if FToken.Kind = tkPlus then
+        Operation := opAdd
+      else if FToken.Kind = tkMinus then
+        Operation := opSubtract
+      else if IsWord('or') then
+        Operation := opOr
+      else if IsWord('xor') then
+        Operation := opXor;
+      if Operation = opNone then
+        Break;
       Position := FToken.Position;
       Complete := FToken.CompleteBoolEval;
       Next;
@@ -2967,14 +3335,22 @@ begin
     while True do
     begin
       Operation := opNone;
-      if FToken.Kind = tkStar then Operation := opMultiply
-      else if FToken.Kind = tkSlash then Operation := opDivide
-      else if IsWord('div') then Operation := opIntDivide
-      else if IsWord('mod') then Operation := opModulo
-      else if IsWord('and') then Operation := opAnd
-      else if IsWord('shl') then Operation := opShiftLeft
-      else if IsWord('shr') then Operation := opShiftRight;
-      if Operation = opNone then Break;
+      if FToken.Kind = tkStar then
+        Operation := opMultiply
+      else if FToken.Kind = tkSlash then
+        Operation := opDivide
+      else if IsWord('div') then
+        Operation := opIntDivide
+      else if IsWord('mod') then
+        Operation := opModulo
+      else if IsWord('and') then
+        Operation := opAnd
+      else if IsWord('shl') then
+        Operation := opShiftLeft
+      else if IsWord('shr') then
+        Operation := opShiftRight;
+      if Operation = opNone then
+        Break;
       Position := FToken.Position;
       Complete := FToken.CompleteBoolEval;
       Next;
@@ -3011,8 +3387,10 @@ begin
       end;
       Exit;
     end;
-    if FToken.Kind = tkMinus then Operation := opNegate
-    else if IsWord('not') then Operation := opNot;
+    if FToken.Kind = tkMinus then
+      Operation := opNegate
+    else if IsWord('not') then
+      Operation := opNot;
     if Operation = opNone then
       Exit(ParsePrimary);
     Next;
@@ -3038,9 +3416,12 @@ begin
         TreeAdaptable(Result.Left) and
         (Result.Left.DataType = stUInt64) and (Result.Left.Bits = $8000000000000000) then
       begin
-        Result.Kind := ekConstant; Result.DataType := stInt64;
-        Result.Bits := $8000000000000000; Result.Adaptable := True;
-        FreeAndNil(Result.Left); Exit;
+        Result.Kind := ekConstant;
+        Result.DataType := stInt64;
+        Result.Bits := $8000000000000000;
+        Result.Adaptable := True;
+        FreeAndNil(Result.Left);
+        Exit;
       end;
       Result.Depth := Result.Left.Depth + 1;
       if Result.Depth > 128 then
@@ -3079,7 +3460,8 @@ begin
             Fail('Vector constructors support at most four arguments');
           Arguments[Count] := ParseExpression;
           Inc(Count);
-          if FToken.Kind <> tkComma then Break;
+          if FToken.Kind <> tkComma then
+            Break;
           Next;
         until False;
       Expect(tkRightParen, '")"');
@@ -3093,8 +3475,7 @@ begin
         Inc(Components, ComponentCount(Arguments[I].DataType));
       end;
       if (Count <> 1) and (Components <> Width) then
-        raise EShaderError.Create(Position, Format('%s constructor expects 1 or %d arguments',
-          [ShaderTypeName(AType), Width]));
+        raise EShaderError.Create(Position, Format('%s constructor expects 1 or %d arguments', [ShaderTypeName(AType), Width]));
       if (Count = 1) and ((Width = 1) or (ComponentCount(Arguments[0].DataType) > 1)) then
       begin
         Convert(Arguments[0], AType, True);
@@ -3122,7 +3503,8 @@ begin
       raise;
     end;
   finally
-    for I := 0 to High(Arguments) do Arguments[I].Free;
+    for I := 0 to High(Arguments) do
+      Arguments[I].Free;
   end;
 end;
 
@@ -3134,10 +3516,13 @@ var
   HasFloat: Boolean;
   FloatBase: TShaderType;
 begin
-  if AIntrinsic >= inSingleToBits then Exit(ParseNumericIntrinsic(AIntrinsic));
+  if AIntrinsic >= inSingleToBits then
+    Exit(ParseNumericIntrinsic(AIntrinsic));
   case AIntrinsic of
-    inAbs, inSqrt: Arity := 1;
-    inMin, inMax, inDot: Arity := 2;
+    inAbs, inSqrt:
+      Arity := 1;
+    inMin, inMax, inDot:
+      Arity := 2;
   else
     Arity := 3;
   end;
@@ -3179,15 +3564,18 @@ begin
               if not IsNumericType(Arguments[I].DataType) then
                 raise EShaderError.Create(Result.Position, 'Clamp requires numeric operands');
               HasFloat := HasFloat or IsFloatType(Arguments[I].DataType);
-              if Arguments[I].DataType = stDouble then FloatBase := stDouble;
+              if Arguments[I].DataType = stDouble then
+                FloatBase := stDouble;
               Width := Max(Width, ComponentCount(Arguments[I].DataType));
             end;
             if HasFloat then
             begin
-              if (FloatBase = stDouble) and (Width <> 1) then Fail('Double currently supports scalar operations only');
+              if (FloatBase = stDouble) and (Width <> 1) then
+                Fail('Double currently supports scalar operations only');
               for I := 0 to 2 do
               begin
-                if ComponentCount(Arguments[I].DataType) = 1 then Splat(Arguments[I], Width);
+                if ComponentCount(Arguments[I].DataType) = 1 then
+                  Splat(Arguments[I], Width);
                 Convert(Arguments[I], VectorType(FloatBase, Width));
               end;
             end
@@ -3200,8 +3588,7 @@ begin
             // Signedness must never depend on argument order.
             if (Arguments[0].DataType <> Arguments[1].DataType) or
               (Arguments[0].DataType <> Arguments[2].DataType) then
-              raise EShaderError.Create(Result.Position,
-                'Clamp arguments must have one common numeric type; use explicit casts');
+              raise EShaderError.Create(Result.Position, 'Clamp arguments must have one common numeric type; use explicit casts');
           end;
         inAbs:
           if not IsNumericType(Arguments[0].DataType) then
@@ -3223,8 +3610,10 @@ begin
               Convert(Arguments[0], VectorType(stSingle, ComponentCount(Arguments[0].DataType)));
           end;
       end;
-      if AIntrinsic = inDot then Result.DataType := stSingle
-      else Result.DataType := Arguments[0].DataType;
+      if AIntrinsic = inDot then
+        Result.DataType := stSingle
+      else
+        Result.DataType := Arguments[0].DataType;
       for I := 0 to Arity - 1 do
       begin
         Result.Depth := Max(Result.Depth, Arguments[I].Depth + 1);
@@ -3238,7 +3627,8 @@ begin
       raise;
     end;
   finally
-    for I := 0 to High(Arguments) do Arguments[I].Free;
+    for I := 0 to High(Arguments) do
+      Arguments[I].Free;
   end;
 end;
 
@@ -3249,9 +3639,12 @@ var
   T: TShaderType;
 begin
   Result := TExpression.Create;
-  Result.Kind := ekIntrinsic; Result.Intrinsic := AIntrinsic; Result.Position := FToken.Position;
+  Result.Kind := ekIntrinsic;
+  Result.Intrinsic := AIntrinsic;
+  Result.Position := FToken.Position;
   try
-    Next; Expect(tkLeftParen, '"("');
+    Next;
+    Expect(tkLeftParen, '"("');
     if AIntrinsic = inFma then
       Count := 3
     else if AIntrinsic in [inLdexp, inArithmeticShiftRight] then
@@ -3260,25 +3653,44 @@ begin
       Count := 1;
     for I := 0 to Count - 1 do
     begin
-      A := ParseExpression; Result.Arguments.Add(A);
+      A := ParseExpression;
+      Result.Arguments.Add(A);
       Result.Depth := Max(Result.Depth, A.Depth + 1);
-      if I < Count - 1 then Expect(tkComma, '","');
+      if I < Count - 1 then
+        Expect(tkComma, '","');
     end;
     Expect(tkRightParen, '")"');
     T := Result.Arguments[0].DataType;
     Result.DataType := T;
     case AIntrinsic of
       inSingleToBits:
-        begin if T <> stSingle then Fail('SingleToBits requires Single'); Result.DataType := stCardinal; end;
+        begin
+          if T <> stSingle then
+            Fail('SingleToBits requires Single');
+          Result.DataType := stCardinal;
+        end;
       inBitsToSingle:
-        begin if T <> stCardinal then Fail('BitsToSingle requires Cardinal'); Result.DataType := stSingle; end;
+        begin
+          if T <> stCardinal then
+            Fail('BitsToSingle requires Cardinal');
+          Result.DataType := stSingle;
+        end;
       inDoubleToBits:
-        begin if T <> stDouble then Fail('DoubleToBits requires Double'); Result.DataType := stUInt64; end;
+        begin
+          if T <> stDouble then
+            Fail('DoubleToBits requires Double');
+          Result.DataType := stUInt64;
+        end;
       inBitsToDouble:
-        begin if T <> stUInt64 then Fail('BitsToDouble requires UInt64'); Result.DataType := stDouble; end;
+        begin
+          if T <> stUInt64 then
+            Fail('BitsToDouble requires UInt64');
+          Result.DataType := stDouble;
+        end;
       inFindMSB, inFindLSB:
         begin
-          if not (T in [stInteger, stCardinal]) then Fail('FindMSB/FindLSB require Integer or Cardinal');
+          if not (T in [stInteger, stCardinal]) then
+            Fail('FindMSB/FindLSB require Integer or Cardinal');
           Result.DataType := stInteger;
         end;
       inArithmeticShiftRight:
@@ -3318,7 +3730,8 @@ begin
         if not (ComponentType(T) = stSingle) then
           Fail('Graphics floating intrinsics require Single scalars or vectors');
       inOrd:
-        if T = stBoolean then Result.DataType := stInteger
+        if T = stBoolean then
+          Result.DataType := stInteger
         else if IsScalarIntegerType(T) then
         begin
           // Ord of an integer is the value itself, with its type.
@@ -3334,20 +3747,32 @@ begin
           Convert(A, stInteger, True);
           Exit(A);
         end
-        else Fail('Ord requires a Boolean, integer or enumeration value');
+        else
+          Fail('Ord requires a Boolean, integer or enumeration value');
       inSqr:
-        if not IsNumericType(T) then Fail('Sqr requires a numeric value');
+        if not IsNumericType(T) then
+          Fail('Sqr requires a numeric value');
     else
-      if not (T in [stSingle, stDouble]) then Fail('Floating intrinsic requires scalar Single or Double');
+      if not (T in [stSingle, stDouble]) then
+        Fail('Floating intrinsic requires scalar Single or Double');
       case AIntrinsic of
-        inRound, inTrunc: Result.DataType := stInt64;
-        inFloor, inCeil: Result.DataType := stInteger;
-        inIsNan, inIsInfinite: Result.DataType := stBoolean;
-        inLdexp: if Result.Arguments[1].DataType <> stInteger then Fail('Ldexp exponent must be Integer');
+        inRound, inTrunc:
+          Result.DataType := stInt64;
+        inFloor, inCeil:
+          Result.DataType := stInteger;
+        inIsNan, inIsInfinite:
+          Result.DataType := stBoolean;
+        inLdexp:
+          if Result.Arguments[1].DataType <> stInteger then
+            Fail('Ldexp exponent must be Integer');
       end;
     end;
-    if Result.Depth > 128 then Fail('Expression nesting limit exceeded');
-  except Result.Free; raise; end;
+    if Result.Depth > 128 then
+      Fail('Expression nesting limit exceeded');
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 procedure TParser.Select(var AExpression: TExpression);
@@ -3362,7 +3787,8 @@ var
 begin
   while FToken.Kind in [tkDot, tkLeftBracket] do
   begin
-    if (FToken.Kind = tkDot) and (PeekToken.Kind = tkDot) then Break;
+    if (FToken.Kind = tkDot) and (PeekToken.Kind = tkDot) then
+      Break;
     Node := TExpression.Create;
     Node.Position := AExpression.Position;
     Node.Left := AExpression;
@@ -3384,17 +3810,24 @@ begin
             Found := True;
             Break;
           end;
-        if not Found then Fail('Unknown record field');
+        if not Found then
+          Fail('Unknown record field');
         Next;
       end
       else
       begin
         // One component (.X) or a swizzle (.XY, .ZYX, .RGBA): one letter set per selector.
-        if ComponentCount(Node.Left.DataType) <= 1 then Fail('Component selection requires a vector');
-        if FToken.Kind <> tkIdentifier then Fail('Expected vector components (X, Y, Z, W or R, G, B, A)');
+        if ComponentCount(Node.Left.DataType) <= 1 then
+          Fail('Component selection requires a vector');
+        if FToken.Kind <> tkIdentifier then
+          Fail('Expected vector components (X, Y, Z, W or R, G, B, A)');
         Letters := UpperCase(FToken.Text);
-        if Length(Letters) > 4 then Fail('A swizzle selects at most four components');
-        if CharInSet(Letters[1], ['R', 'G', 'B', 'A']) then Alphabet := 'RGBA' else Alphabet := 'XYZW';
+        if Length(Letters) > 4 then
+          Fail('A swizzle selects at most four components');
+        if CharInSet(Letters[1], ['R', 'G', 'B', 'A']) then
+          Alphabet := 'RGBA'
+        else
+          Alphabet := 'XYZW';
         Swizzle := 0;
         for I := 1 to Length(Letters) do
         begin
@@ -3433,17 +3866,22 @@ begin
       if not IsScalarIntegerType(Node.Right.DataType) then
         Fail('Array indices must have type Integer or Cardinal');
       // A[I, J] is A[I][J]: the comma continues with the next dimension.
-      if FToken.Kind = tkComma then FToken.Kind := tkLeftBracket
-      else Expect(tkRightBracket, '"]"');
+      if FToken.Kind = tkComma then
+        FToken.Kind := tkLeftBracket
+      else
+        Expect(tkRightBracket, '"]"');
       CheckConstantIndex(Node.Right, ParentType.Length);
       Node.ConstantIndex := EvaluateConstant(Node.Right, IndexConstant);
-      if Node.ConstantIndex then Node.MemberIndex := IndexConstant.Bits;
+      if Node.ConstantIndex then
+        Node.MemberIndex := IndexConstant.Bits;
       if not ExpressionIsAddressable(Node.Left) and not Node.ConstantIndex then
         Fail('Dynamic indexing requires an addressable array variable');
     end;
     Node.Depth := Node.Left.Depth + 1;
-    if Node.Right <> nil then Node.Depth := Max(Node.Depth, Node.Right.Depth + 1);
-    if Node.Depth > 128 then Fail('Expression nesting limit exceeded');
+    if Node.Right <> nil then
+      Node.Depth := Max(Node.Depth, Node.Right.Depth + 1);
+    if Node.Depth > 128 then
+      Fail('Expression nesting limit exceeded');
   end;
 end;
 
@@ -3458,8 +3896,7 @@ begin
   end;
 end;
 
-function TParser.MakeConstant(AType: TShaderType; ABits: UInt64; AAdaptable: Boolean;
-  const APosition: TSourcePosition): TExpression;
+function TParser.MakeConstant(AType: TShaderType; ABits: UInt64; AAdaptable: Boolean; const APosition: TSourcePosition): TExpression;
 begin
   Result := TExpression.Create;
   Result.Kind := ekConstant;
@@ -3470,13 +3907,18 @@ begin
 end;
 
 function HasBooleanLayout(AType: TShaderType; AComposite: TCompositeType): Boolean;
-var Field: TTypeField;
+var
+  Field: TTypeField;
 begin
-  if AType in [stBoolean, stEnum, stSet] then Exit(True);
-  if AType <> stComposite then Exit(False);
-  if AComposite.Kind = ctArray then Exit(HasBooleanLayout(AComposite.ElementType, AComposite.ElementComposite));
+  if AType in [stBoolean, stEnum, stSet] then
+    Exit(True);
+  if AType <> stComposite then
+    Exit(False);
+  if AComposite.Kind = ctArray then
+    Exit(HasBooleanLayout(AComposite.ElementType, AComposite.ElementComposite));
   for Field in AComposite.Fields do
-    if HasBooleanLayout(Field.DataType, Field.Composite) then Exit(True);
+    if HasBooleanLayout(Field.DataType, Field.Composite) then
+      Exit(True);
   Result := False;
 end;
 
@@ -3544,7 +3986,8 @@ begin
     not FLocalSymbols.ContainsKey(LowerCase(FToken.Text)) and
     FSymbols.TryGetValue(LowerCase(FToken.Text), Variable) and (Variable.Kind = vkBuffer) then
   begin
-    if FCurrentFunction = nil then Fail('Length of a runtime buffer is not a constant');
+    if FCurrentFunction = nil then
+      Fail('Length of a runtime buffer is not a constant');
     Next;
     Expect(tkRightParen, '")"');
     Result := TExpression.Create;
@@ -3574,7 +4017,8 @@ begin
         Composite := Reference.Composite;
         Next;
       end
-      else if Owner <> '' then Fail('Unknown exported type in module ' + Owner);
+      else if Owner <> '' then
+        Fail('Unknown exported type in module ' + Owner);
     end;
   end;
   if not IsType then
@@ -3593,15 +4037,19 @@ begin
   end;
   if (DataType = stComposite) and (Composite.Kind = ctArray) then
   begin
-    if Name = 'low' then Exit(MakeConstant(stInteger, 0, True, Position));
-    if Name = 'high' then Exit(MakeConstant(stInteger, Composite.Length - 1, True, Position));
+    if Name = 'low' then
+      Exit(MakeConstant(stInteger, 0, True, Position));
+    if Name = 'high' then
+      Exit(MakeConstant(stInteger, Composite.Length - 1, True, Position));
     Exit(MakeConstant(stInteger, Composite.Length, True, Position));
   end;
   if (Name <> 'length') and (DataType = stEnum) then
   begin
     // Low/High of an enumeration (type or value): its smallest/largest enumerator.
-    if Name = 'low' then Result := MakeConstant(stEnum, EnumLow(Composite), False, Position)
-    else Result := MakeConstant(stEnum, EnumHigh(Composite), False, Position);
+    if Name = 'low' then
+      Result := MakeConstant(stEnum, EnumLow(Composite), False, Position)
+    else
+      Result := MakeConstant(stEnum, EnumHigh(Composite), False, Position);
     Result.Composite := Composite;
     Exit;
   end;
@@ -3662,17 +4110,21 @@ begin
     end;
     Exit;
   end;
-  if IsWord('Default') then Exit(ParseDefault);
-  if FToken.Kind = tkLeftBracket then Exit(ParseSetConstructor);
+  if IsWord('Default') then
+    Exit(ParseDefault);
+  if FToken.Kind = tkLeftBracket then
+    Exit(ParseSetConstructor);
   if IsWord('if') then
     Fail('An if expression inside an operand must be parenthesized: (if C then A else B)');
   if IsWord('Low') or IsWord('High') or IsWord('Length') or IsWord('SizeOf') or
-    IsWord('Odd') or IsWord('Succ') or IsWord('Pred') then Exit(ParseBuiltin);
+    IsWord('Odd') or IsWord('Succ') or IsWord('Pred') then
+    Exit(ParseBuiltin);
   if IsWord('AtomicAdd') or IsWord('AtomicExchange') or IsWord('AtomicCompareExchange') or
     IsWord('AtomicAnd') or IsWord('AtomicOr') then
     Exit(ParseAtomic);
   if IsWord('ImageLoad') or IsWord('ImageSize') or IsWord('SampleLevel') or
-    IsWord('TexelFetch') or IsWord('TextureSize') then Exit(ParseImageOperation);
+    IsWord('TexelFetch') or IsWord('TextureSize') then
+    Exit(ParseImageOperation);
   Owner := ReadOwnerPrefix;
   if (Owner = '') and (FFunctions.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) or
     FNamedTypes.ContainsKey(SymbolKey(CurrentOwner, FToken.Text)) or FConstants.ContainsKey(SymbolKey(CurrentOwner, FToken.Text))) then
@@ -3721,13 +4173,18 @@ begin
   if (FToken.Kind = tkIdentifier) and not FLocalSymbols.ContainsKey(LowerCase(FToken.Text)) and
     FindConstant(FToken.Text, Owner, ConstantExpression, False) then
   begin
-    if FindFunction(FToken.Text, Owner, Callee, False) then Fail('Ambiguous exported identifier; use a module qualifier');
+    if FindFunction(FToken.Text, Owner, Callee, False) then
+      Fail('Ambiguous exported identifier; use a module qualifier');
     Result := TExpression.Create;
-    Result.Kind := ConstantExpression.Kind; Result.Position := FToken.Position;
-    Result.DataType := ConstantExpression.DataType; Result.Bits := ConstantExpression.Bits;
-    Result.Composite := ConstantExpression.Composite; Result.Variable := ConstantExpression.Variable;
+    Result.Kind := ConstantExpression.Kind;
+    Result.Position := FToken.Position;
+    Result.DataType := ConstantExpression.DataType;
+    Result.Bits := ConstantExpression.Bits;
+    Result.Composite := ConstantExpression.Composite;
+    Result.Variable := ConstantExpression.Variable;
     Result.Adaptable := ConstantExpression.Adaptable;
-    Next; Exit;
+    Next;
+    Exit;
   end;
   if (Owner = '') and (FToken.Kind = tkIdentifier) and TryIntrinsic(FToken.Text, Intrinsic) then
     Exit(ParseIntrinsic(Intrinsic));
@@ -3738,7 +4195,8 @@ begin
     if not FLocalSymbols.ContainsKey(LowerCase(FToken.Text)) and not FSymbols.ContainsKey(LowerCase(FToken.Text)) and
       not FindFunction(FToken.Text, Owner, Callee, False) then
     begin
-      FindType(FToken.Text, Owner, Reference); FindConstant(FToken.Text, Owner, ConstantExpression);
+      FindType(FToken.Text, Owner, Reference);
+      FindConstant(FToken.Text, Owner, ConstantExpression);
     end;
     Exit(ParseReference(False, Owner));
   end;
@@ -3754,9 +4212,12 @@ begin
       Result.Adaptable := True;
       if Number <= UInt64(High(Integer)) then
         Result.DataType := stInteger
-      else if Number <= High(Cardinal) then Result.DataType := stCardinal
-      else if Number <= UInt64(High(Int64)) then Result.DataType := stInt64
-      else Result.DataType := stUInt64;
+      else if Number <= High(Cardinal) then
+        Result.DataType := stCardinal
+      else if Number <= UInt64(High(Int64)) then
+        Result.DataType := stInt64
+      else
+        Result.DataType := stUInt64;
     end
     else if FToken.Kind = tkDouble then
     begin
@@ -3786,7 +4247,8 @@ end;
 
 function TParser.ReadResource: TShaderVariable;
 begin
-  if FCurrentFunction = nil then Fail('Constant expressions cannot read GPU resources');
+  if FCurrentFunction = nil then
+    Fail('Constant expressions cannot read GPU resources');
   if (FToken.Kind <> tkIdentifier) or not FSymbols.TryGetValue(LowerCase(FToken.Text), Result) then
     Fail('Expected a shader resource name');
   Next;
@@ -3801,35 +4263,57 @@ begin
   if FCurrentFunction = nil then
     Fail('Constant expressions cannot perform atomics');
   Result := TExpression.Create;
-  Result.Kind := ekAtomic; Result.Position := FToken.Position;
-  if IsWord('AtomicAdd') then Result.AtomicKind := akAdd
-  else if IsWord('AtomicExchange') then Result.AtomicKind := akExchange
-  else if IsWord('AtomicAnd') then Result.AtomicKind := akAnd
-  else if IsWord('AtomicOr') then Result.AtomicKind := akOr
-  else Result.AtomicKind := akCompareExchange;
+  Result.Kind := ekAtomic;
+  Result.Position := FToken.Position;
+  if IsWord('AtomicAdd') then
+    Result.AtomicKind := akAdd
+  else if IsWord('AtomicExchange') then
+    Result.AtomicKind := akExchange
+  else if IsWord('AtomicAnd') then
+    Result.AtomicKind := akAnd
+  else if IsWord('AtomicOr') then
+    Result.AtomicKind := akOr
+  else
+    Result.AtomicKind := akCompareExchange;
   try
-    Next; Expect(tkLeftParen, '"("');
+    Next;
+    Expect(tkLeftParen, '"("');
     Result.Left := ParseReference(True);
-    if not (Result.Left.DataType in [stInteger, stCardinal]) then Fail('Atomic target must be scalar Integer or Cardinal');
+    if not (Result.Left.DataType in [stInteger, stCardinal]) then
+      Fail('Atomic target must be scalar Integer or Cardinal');
     Base := Result.Left;
-    while Base.Kind in [ekField,ekIndex,ekComponent] do Base := Base.Left;
-    if (Base.Variable = nil) or not (Base.Variable.Kind in [vkBuffer,vkShared]) then
+    while Base.Kind in [ekField, ekIndex, ekComponent] do
+      Base := Base.Left;
+    if (Base.Variable = nil) or not (Base.Variable.Kind in [vkBuffer, vkShared]) then
       Fail('Atomic target must be a ReadWrite storage buffer or shared array');
     if (Base.Variable.Kind = vkBuffer) and (Base.Variable.Access <> baReadWrite) then
       Fail('Atomic read-modify-write requires ReadWrite access');
     Result.DataType := Result.Left.DataType;
-    Count := 1; if Result.AtomicKind = akCompareExchange then Count := 2;
+    Count := 1;
+    if Result.AtomicKind = akCompareExchange then
+      Count := 2;
     for I := 0 to Count - 1 do
     begin
-      Expect(tkComma, '","'); Argument := ParseExpression;
-      try Convert(Argument, Result.DataType); except Argument.Free; raise; end;
+      Expect(tkComma, '","');
+      Argument := ParseExpression;
+      try
+        Convert(Argument, Result.DataType);
+      except
+        Argument.Free;
+        raise;
+      end;
       Result.Arguments.Add(Argument);
     end;
     Expect(tkRightParen, '")"');
     Result.Depth := Result.Left.Depth + 1;
-    for Argument in Result.Arguments do Result.Depth := Max(Result.Depth, Argument.Depth + 1);
-    if Result.Depth > 128 then Fail('Expression nesting limit exceeded');
-  except Result.Free; raise; end;
+    for Argument in Result.Arguments do
+      Result.Depth := Max(Result.Depth, Argument.Depth + 1);
+    if Result.Depth > 128 then
+      Fail('Expression nesting limit exceeded');
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 function TParser.ParseImageOperation: TExpression;
@@ -3837,10 +4321,12 @@ var
   Name: string;
   Argument: TExpression;
 begin
-  Result := TExpression.Create; Result.Position := FToken.Position;
+  Result := TExpression.Create;
+  Result.Position := FToken.Position;
   Name := LowerCase(FToken.Text);
   try
-    Next; Expect(tkLeftParen, '"("');
+    Next;
+    Expect(tkLeftParen, '"("');
     Result.Variable := ReadResource;
     if (Name = 'texelfetch') or (Name = 'texturesize') then
     begin
@@ -3873,10 +4359,12 @@ begin
     end
     else if Name = 'samplelevel' then
     begin
-      if Result.Variable.Kind <> vkTexture then Fail('SampleLevel requires Texture2D');
+      if Result.Variable.Kind <> vkTexture then
+        Fail('SampleLevel requires Texture2D');
       if Result.Variable.DataType <> stSingle4 then
         Fail('SampleLevel requires a floating-point texture');
-      Result.Kind := ekSampleLevel; Result.DataType := stSingle4;
+      Result.Kind := ekSampleLevel;
+      Result.DataType := stSingle4;
       if not Result.Variable.CombinedSampler then
       begin
         Expect(tkComma, '","');
@@ -3884,49 +4372,85 @@ begin
         if Result.Sampler.Kind <> vkSampler then
           Fail('Expected a Sampler resource');
       end;
-      Expect(tkComma, '","'); Argument := ParseExpression;
-      try Convert(Argument, stSingle2); except Argument.Free; raise; end;
+      Expect(tkComma, '","');
+      Argument := ParseExpression;
+      try
+        Convert(Argument, stSingle2);
+      except
+        Argument.Free;
+        raise;
+      end;
       Result.Arguments.Add(Argument);
-      Expect(tkComma, '","'); Argument := ParseExpression;
-      try Convert(Argument, stSingle); except Argument.Free; raise; end;
+      Expect(tkComma, '","');
+      Argument := ParseExpression;
+      try
+        Convert(Argument, stSingle);
+      except
+        Argument.Free;
+        raise;
+      end;
       Result.Arguments.Add(Argument);
     end
     else
     begin
-      if Result.Variable.Kind <> vkImage then Fail('Image operations require a typed storage image');
-      if Name = 'imagesize' then begin Result.Kind := ekImageSize; Result.DataType := stInteger2; end
+      if Result.Variable.Kind <> vkImage then
+        Fail('Image operations require a typed storage image');
+      if Name = 'imagesize' then
+      begin
+        Result.Kind := ekImageSize;
+        Result.DataType := stInteger2;
+      end
       else
       begin
-        Expect(tkComma, '","'); Argument := ParseExpression;
+        Expect(tkComma, '","');
+        Argument := ParseExpression;
         Result.Arguments.Add(Argument);
-        if not (Argument.DataType in [stInteger2,stCardinal2]) then Fail('Image coordinates must be Integer2 or Cardinal2');
+        if not (Argument.DataType in [stInteger2, stCardinal2]) then
+          Fail('Image coordinates must be Integer2 or Cardinal2');
         if Name = 'imageload' then
         begin
-          if Result.Variable.Access = baWriteOnly then Fail('Cannot load a WriteOnly image');
-          Result.Kind := ekImageLoad; Result.DataType := ImagePixelType(Result.Variable.ImageFormat);
+          if Result.Variable.Access = baWriteOnly then
+            Fail('Cannot load a WriteOnly image');
+          Result.Kind := ekImageLoad;
+          Result.DataType := ImagePixelType(Result.Variable.ImageFormat);
         end
         else
         begin
-          if Result.Variable.Access = baReadOnly then Fail('Cannot store a ReadOnly image');
-          Result.Kind := ekImageStore; Result.DataType := stVoid;
-          Expect(tkComma, '","'); Argument := ParseExpression;
-          try Convert(Argument, ImagePixelType(Result.Variable.ImageFormat)); except Argument.Free; raise; end;
+          if Result.Variable.Access = baReadOnly then
+            Fail('Cannot store a ReadOnly image');
+          Result.Kind := ekImageStore;
+          Result.DataType := stVoid;
+          Expect(tkComma, '","');
+          Argument := ParseExpression;
+          try
+            Convert(Argument, ImagePixelType(Result.Variable.ImageFormat));
+          except
+            Argument.Free;
+            raise;
+          end;
           Result.Arguments.Add(Argument);
         end;
       end;
     end;
     Expect(tkRightParen, '")"');
-    for Argument in Result.Arguments do Result.Depth := Max(Result.Depth, Argument.Depth + 1);
-    if Result.Depth > 128 then Fail('Expression nesting limit exceeded');
-  except Result.Free; raise; end;
+    for Argument in Result.Arguments do
+      Result.Depth := Max(Result.Depth, Argument.Depth + 1);
+    if Result.Depth > 128 then
+      Fail('Expression nesting limit exceeded');
+  except
+    Result.Free;
+    raise;
+  end;
 end;
 
 // var/out arguments: writable function-local lvalues of exactly the parameter type.
 procedure CheckReferenceArgument(AArgument: TExpression; AParameter: TShaderVariable);
-var Base: TExpression;
+var
+  Base: TExpression;
 begin
   Base := AArgument;
-  while Base.Kind in [ekField, ekIndex, ekComponent] do Base := Base.Left;
+  while Base.Kind in [ekField, ekIndex, ekComponent] do
+    Base := Base.Left;
   if (Base.Kind <> ekLocal) or not (Base.Variable.Kind in [vkLocal, vkParameter, vkResult]) then
     raise EShaderError.Create(AArgument.Position, 'var/out arguments must be writable function-local lvalues, not resources');
   if (AArgument.DataType <> AParameter.DataType) or (AArgument.Composite <> AParameter.Composite) then
@@ -3938,8 +4462,10 @@ begin
   if IsSignedInteger(AValue.DataType) and (SignedValue(AValue.Bits, AValue.DataType) < 0) then
     Result := IsSignedInteger(AType) and
       (SignedValue(AValue.Bits, AValue.DataType) >= SignedValue(UInt64(1) shl (ScalarBitWidth(AType) - 1), AType))
-  else if IsSignedInteger(AType) then Result := AValue.Bits <= (UInt64(1) shl (ScalarBitWidth(AType) - 1)) - 1
-  else Result := AValue.Bits <= IntegerMask(AType);
+  else if IsSignedInteger(AType) then
+    Result := AValue.Bits <= (UInt64(1) shl (ScalarBitWidth(AType) - 1)) - 1
+  else
+    Result := AValue.Bits <= IntegerMask(AType);
 end;
 
 // Overload resolution cost of passing AArgument to AParameter: 0 exact type,
@@ -3952,23 +4478,28 @@ var
 begin
   S := AArgument.DataType;
   T := AParameter.DataType;
-  if (S = T) and (AArgument.Composite = AParameter.Composite) then Exit(0);
-  if AParameter.ParameterMode in [pmVar, pmOut] then Exit(-1);
+  if (S = T) and (AArgument.Composite = AParameter.Composite) then
+    Exit(0);
+  if AParameter.ParameterMode in [pmVar, pmOut] then
+    Exit(-1);
   if (S in [stComposite, stEnum, stSet]) or (T in [stComposite, stEnum, stSet]) then
   begin
-    if (S = stSet) and (T = stSet) and (AArgument.Composite = nil) and (AArgument.Kind = ekConstant) then Exit(1);
+    if (S = stSet) and (T = stSet) and (AArgument.Composite = nil) and (AArgument.Kind = ekConstant) then
+      Exit(1);
     Exit(-1);
   end;
   if IsScalarIntegerType(S) and IsScalarIntegerType(T) then
   begin
     if TreeAdaptable(AArgument) and EvaluateConstant(AArgument, V) and ExactNarrowConstant(AArgument) and
-      ConstantFits(V, T) then Exit(1);
+      ConstantFits(V, T) then
+      Exit(1);
     Exit(-1);
   end;
   if IsNumericType(S) and IsNumericType(T) and (ComponentCount(S) = ComponentCount(T)) and IsFloatType(T) and
     not ((ComponentType(S) = stDouble) and (ComponentType(T) = stSingle)) then
   begin
-    if ComponentType(T) = stSingle then Exit(2);
+    if ComponentType(T) = stSingle then
+      Exit(2);
     Exit(3);
   end;
   Result := -1;
@@ -3977,9 +4508,11 @@ end;
 // A call to a nested routine reads/writes variables of enclosing routines:
 // the caller tracks them too (unless it owns them).
 procedure TParser.NoteCall(ACallee: TShaderFunction; const APosition: TSourcePosition);
-var V: TShaderVariable;
+var
+  V: TShaderVariable;
 begin
-  for V in ACallee.Captures do MarkCapture(V, APosition);
+  for V in ACallee.Captures do
+    MarkCapture(V, APosition);
 end;
 
 // Arguments are parsed first (as references where all candidates of that
@@ -4025,14 +4558,18 @@ begin
                 end
                 else if ByReference <> (Candidate.Parameters[I].ParameterMode in [pmVar, pmOut]) then
                   Fail(Format('Overloads of "%s" differ in var/out for argument %d; the call is ambiguous',
-                    [AHead.Name, I + 1]));
+                      [AHead.Name, I + 1]));
               end;
               Candidate := Candidate.NextOverload;
             end;
-            if not Known then Fail(Format('Too many arguments for "%s"', [AHead.Name]));
-            if ByReference then Arguments.Add(ParseReference(True))
-            else Arguments.Add(ParseExpression);
-            if FToken.Kind <> tkComma then Break;
+            if not Known then
+              Fail(Format('Too many arguments for "%s"', [AHead.Name]));
+            if ByReference then
+              Arguments.Add(ParseReference(True))
+            else
+              Arguments.Add(ParseExpression);
+            if FToken.Kind <> tkComma then
+              Break;
             Next;
           until False;
         Expect(tkRightParen, '")"');
@@ -4047,7 +4584,8 @@ begin
           for I := 0 to Arguments.Count - 1 do
           begin
             Cost[I] := ConversionCost(Arguments[I], Candidate.Parameters[I]);
-            if Cost[I] < 0 then Acceptable := False;
+            if Cost[I] < 0 then
+              Acceptable := False;
           end;
           if Acceptable then
           begin
@@ -4058,8 +4596,7 @@ begin
         Candidate := Candidate.NextOverload;
       end;
       if Viable.Count = 0 then
-        raise EShaderError.Create(Position, Format('No overload of "%s" accepts these %d arguments',
-          [AHead.Name, Arguments.Count]));
+        raise EShaderError.Create(Position, Format('No overload of "%s" accepts these %d arguments', [AHead.Name, Arguments.Count]));
       Best := nil;
       for I := 0 to Viable.Count - 1 do
       begin
@@ -4067,11 +4604,16 @@ begin
         for J := 0 to Viable.Count - 1 do
           if I <> J then
             for K := 0 to Arguments.Count - 1 do
-              if Costs[I][K] > Costs[J][K] then Dominates := False;
+              if Costs[I][K] > Costs[J][K] then
+                Dominates := False;
         if Dominates then
         begin
-          if Best <> nil then Best := nil else Best := Viable[I];
-          if Best = nil then Break;
+          if Best <> nil then
+            Best := nil
+          else
+            Best := Viable[I];
+          if Best = nil then
+            Break;
         end;
       end;
       if Best = nil then
@@ -4091,7 +4633,8 @@ begin
         try
           if Best.Parameters[I].ParameterMode in [pmVar, pmOut] then
             CheckReferenceArgument(Argument, Best.Parameters[I])
-          else Convert(Argument, Best.Parameters[I].DataType, False, Best.Parameters[I].Composite);
+          else
+            Convert(Argument, Best.Parameters[I].DataType, False, Best.Parameters[I].Composite);
         except
           Argument.Free;
           raise;
@@ -4099,14 +4642,16 @@ begin
         Result.Arguments.Add(Argument);
         Result.Depth := Max(Result.Depth, Argument.Depth + 1);
       end;
-      if Result.Depth > 128 then Fail('Expression nesting limit exceeded');
+      if Result.Depth > 128 then
+        Fail('Expression nesting limit exceeded');
       NoteCall(Best, Position);
     except
       Result.Free;
       raise;
     end;
   finally
-    for Argument in Arguments do Argument.Free;
+    for Argument in Arguments do
+      Argument.Free;
     Arguments.Free;
     Viable.Free;
     Costs.Free;
@@ -4118,8 +4663,10 @@ var
   Argument: TExpression;
   I: Integer;
 begin
-  if ACallee = FModule.EntryPoint then Fail('Entry point Main cannot be called');
-  if ACallee.NextOverload <> nil then Exit(ParseOverloadedCall(ACallee));
+  if ACallee = FModule.EntryPoint then
+    Fail('Entry point Main cannot be called');
+  if ACallee.NextOverload <> nil then
+    Exit(ParseOverloadedCall(ACallee));
   Result := TExpression.Create;
   Result.Kind := ekCall;
   Result.Position := FToken.Position;
@@ -4146,11 +4693,13 @@ begin
           Fail(Format('Too many arguments for function "%s"', [ACallee.Name]));
         if ACallee.Parameters[I].ParameterMode in [pmVar, pmOut] then
           Argument := ParseReference(True)
-        else Argument := ParseExpression;
+        else
+          Argument := ParseExpression;
         try
           if ACallee.Parameters[I].ParameterMode in [pmVar, pmOut] then
             CheckReferenceArgument(Argument, ACallee.Parameters[I])
-          else Convert(Argument, ACallee.Parameters[I].DataType, False, ACallee.Parameters[I].Composite);
+          else
+            Convert(Argument, ACallee.Parameters[I].DataType, False, ACallee.Parameters[I].Composite);
         except
           Argument.Free;
           raise;
@@ -4166,9 +4715,7 @@ begin
       until False;
     Expect(tkRightParen, '")"');
     if I <> ACallee.Parameters.Count then
-      raise EShaderError.Create(Result.Position,
-        Format('Function "%s" expects %d arguments, got %d',
-        [ACallee.Name, ACallee.Parameters.Count, I]));
+      raise EShaderError.Create(Result.Position, Format('Function "%s" expects %d arguments, got %d', [ACallee.Name, ACallee.Parameters.Count, I]));
     NoteCall(ACallee, Result.Position);
   except
     Result.Free;
@@ -4188,9 +4735,11 @@ begin
   if FToken.Kind <> tkIdentifier then
     Fail('Expected a variable, literal or parenthesized expression');
   Owner := AOwner;
-  if Owner = '' then Owner := ReadOwnerPrefix;
+  if Owner = '' then
+    Owner := ReadOwnerPrefix;
   Name := FToken;
-  if AForWrite and FindConstant(Name.Text, Owner, ConstantExpression, False) then Fail('Constants are read-only');
+  if AForWrite and FindConstant(Name.Text, Owner, ConstantExpression, False) then
+    Fail('Constants are read-only');
   if IsWord('Main') then
     Fail('Entry point Main cannot be called');
   if not FLocalSymbols.ContainsKey(LowerCase(Name.Text)) and
@@ -4224,13 +4773,15 @@ begin
   end;
   // A consumed qualifier is a namespace boundary, never a hint to retry locals,
   // shader resources or invocation built-ins under the same short name.
-  if Owner <> '' then Fail('Unknown exported value in module ' + Owner);
+  if Owner <> '' then
+    Fail('Unknown exported value in module ' + Owner);
   Result := TExpression.Create;
   Result.Position := Name.Position;
   try
     if TryBuiltin(FToken.Text, Builtin) then
     begin
-      if FCurrentFunction = nil then Fail('Constant expressions cannot read GPU built-ins');
+      if FCurrentFunction = nil then
+        Fail('Constant expressions cannot read GPU built-ins');
       if AForWrite then
         Fail('GlobalInvocationID is read-only');
       Next;
@@ -4248,10 +4799,12 @@ begin
     Result.Variable := Variable;
     Result.DataType := Variable.DataType;
     Result.Composite := Variable.Composite;
-    if Variable.Kind in [vkLocal, vkParameter, vkResult] then MarkCapture(Variable, Name.Position);
+    if Variable.Kind in [vkLocal, vkParameter, vkResult] then
+      MarkCapture(Variable, Name.Position);
     Next;
     case Variable.Kind of
-      vkShared: Result.Kind := ekLocal;
+      vkShared:
+        Result.Kind := ekLocal;
       vkInput, vkOutput:
         begin
           Result.Kind := ekLocal;
@@ -4262,7 +4815,8 @@ begin
           if not AForWrite and (Variable.Kind = vkOutput) then
             Fail('Stage outputs are write-only; use a local intermediate');
         end;
-      vkImage, vkTexture, vkSampler: Fail('Opaque resources require ImageLoad/ImageStore/ImageSize/SampleLevel');
+      vkImage, vkTexture, vkSampler:
+        Fail('Opaque resources require ImageLoad/ImageStore/ImageSize/SampleLevel');
       vkLocal, vkParameter, vkResult:
         begin
           Result.Kind := ekLocal;
@@ -4286,8 +4840,10 @@ begin
           if not IsScalarIntegerType(Result.Left.DataType) then
             Fail('Buffer indices must have type Integer or Cardinal');
           CheckConstantIndex(Result.Left, -1);
-          if FToken.Kind = tkComma then FToken.Kind := tkLeftBracket
-          else Expect(tkRightBracket, '"]"');
+          if FToken.Kind = tkComma then
+            FToken.Kind := tkLeftBracket
+          else
+            Expect(tkRightBracket, '"]"');
         end;
       vkPushConstant:
         begin
@@ -4314,7 +4870,8 @@ begin
   Result := FCurrentFunction;
   while Result <> nil do
   begin
-    if (Result.ResultVariable <> nil) and InOverloadChain(ACallee, Result) then Exit;
+    if (Result.ResultVariable <> nil) and InOverloadChain(ACallee, Result) then
+      Exit;
     Result := Result.Outer;
   end;
 end;
@@ -4326,18 +4883,18 @@ procedure TParser.MarkCapture(AVariable: TShaderVariable; const APosition: TSour
 var
   F: TShaderFunction;
 begin
-  if (AVariable.Owner = nil) or (AVariable.Owner = FCurrentFunction) then Exit;
+  if (AVariable.Owner = nil) or (AVariable.Owner = FCurrentFunction) then
+    Exit;
   if (AVariable.Kind = vkParameter) and (AVariable.ParameterMode in [pmVar, pmOut]) then
-    raise EShaderError.Create(APosition, Format(
-      'A nested routine cannot use var/out parameter "%s" of an enclosing routine; pass it as an argument',
-      [AVariable.Name]));
+    raise EShaderError.Create(APosition, Format('A nested routine cannot use var/out parameter "%s" of an enclosing routine; pass it as an argument', [AVariable.Name]));
   if AVariable.ActiveFor then
     raise EShaderError.Create(APosition, 'An active for-loop counter cannot be used by a nested routine');
   AVariable.Captured := True;
   F := FCurrentFunction;
   while (F <> nil) and (F <> AVariable.Owner) do
   begin
-    if not F.Captures.Contains(AVariable) then F.Captures.Add(AVariable);
+    if not F.Captures.Contains(AVariable) then
+      F.Captures.Add(AVariable);
     F := F.Outer;
   end;
 end;
@@ -4379,7 +4936,8 @@ var
   Document: TSourceDocument;
   Attributes: TAttributes;
 begin
-  if FProgram = nil then Exit;
+  if FProgram = nil then
+    Exit;
   Attributes := Default(TAttributes);
   for Document in FProgram.Libraries do
   begin
@@ -4389,8 +4947,12 @@ begin
     FHasLookahead := False;
     Next;
     while IsWord('type') or IsWord('const') do
-      if IsWord('type') then ParseTypes else ParseConstants;
-    while IsWord('function') or (IsWord('procedure') and not SameText(PeekToken.Text, 'Main')) do ParseFunction(False, Attributes);
+      if IsWord('type') then
+        ParseTypes
+      else
+        ParseConstants;
+    while IsWord('function') or (IsWord('procedure') and not SameText(PeekToken.Text, 'Main')) do
+      ParseFunction(False, Attributes);
     if FToken.Kind <> tkEOF then
       Fail('Modules may only declare types and functions or constants; resources and Main belong to the shader');
   end;
@@ -4408,23 +4970,34 @@ var
   Path: TList<TShaderFunction>;
 
   procedure CollectExpression(E: TExpression; ACalls: TList<TShaderFunction>);
-  var A: TExpression;
+  var
+    A: TExpression;
   begin
-    if E = nil then Exit;
-    if (E.Kind = ekCall) and not ACalls.Contains(E.Callee) then ACalls.Add(E.Callee);
+    if E = nil then
+      Exit;
+    if (E.Kind = ekCall) and not ACalls.Contains(E.Callee) then
+      ACalls.Add(E.Callee);
     CollectExpression(E.Left, ACalls);
     CollectExpression(E.Right, ACalls);
-    for A in E.Arguments do CollectExpression(A, ACalls);
+    for A in E.Arguments do
+      CollectExpression(A, ACalls);
   end;
 
   procedure CollectStatement(S: TStatement; ACalls: TList<TShaderFunction>);
-  var C: TStatement;
+  var
+    C: TStatement;
   begin
-    if S = nil then Exit;
-    CollectExpression(S.Target, ACalls); CollectExpression(S.Value, ACalls);
-    CollectExpression(S.Condition, ACalls); CollectExpression(S.Limit, ACalls);
-    CollectStatement(S.ThenPart, ACalls); CollectStatement(S.ElsePart, ACalls); CollectStatement(S.Body, ACalls);
-    for C in S.Children do CollectStatement(C, ACalls);
+    if S = nil then
+      Exit;
+    CollectExpression(S.Target, ACalls);
+    CollectExpression(S.Value, ACalls);
+    CollectExpression(S.Condition, ACalls);
+    CollectExpression(S.Limit, ACalls);
+    CollectStatement(S.ThenPart, ACalls);
+    CollectStatement(S.ElsePart, ACalls);
+    CollectStatement(S.Body, ACalls);
+    for C in S.Children do
+      CollectStatement(C, ACalls);
   end;
 
   procedure Visit(F: TShaderFunction);
@@ -4444,10 +5017,12 @@ var
         if State.ContainsKey(G) and (State[G] = 1) then
         begin
           Cycle := '';
-          for I := Path.IndexOf(G) to Path.Count - 1 do Cycle := Cycle + Path[I].Name + ' -> ';
+          for I := Path.IndexOf(G) to Path.Count - 1 do
+            Cycle := Cycle + Path[I].Name + ' -> ';
           raise EShaderError.Create(G.Position, 'Recursion is not supported in shader functions: ' + Cycle + G.Name);
         end;
-        if not State.ContainsKey(G) then Visit(G);
+        if not State.ContainsKey(G) then
+          Visit(G);
       end;
     finally
       Calls.Free;
@@ -4466,7 +5041,8 @@ begin
   Path := TList<TShaderFunction>.Create;
   try
     for F in FModule.Functions do
-      if not State.ContainsKey(F) then Visit(F);
+      if not State.ContainsKey(F) then
+        Visit(F);
   finally
     Path.Free;
     State.Free;
@@ -4483,7 +5059,10 @@ begin
   if IsWord('uses') or IsWord('module') then
     Fail('Modules require file compilation or supplied texts; use TShaderCompiler.CompileFile or CompileText');
   while IsWord('type') or IsWord('const') do
-    if IsWord('type') then ParseTypes else ParseConstants;
+    if IsWord('type') then
+      ParseTypes
+    else
+      ParseConstants;
   Attributes := Default(TAttributes);
   if IsWord('var') then
   begin
@@ -4515,3 +5094,4 @@ begin
 end;
 
 end.
+
